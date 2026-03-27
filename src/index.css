@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@layer base {
+  :root {
+    /* White/Light backgrounds as shown in images */
+    --background: 0 0% 100%;
+    --foreground: 215 25% 27%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 27%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 27%;
+
+    /* Navy blue for text headings */
+    --primary: 215 50% 23%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Amber/Yellow accent - matches the buttons in images */
+    --accent: 40 96% 53%;
+    --accent-foreground: 215 50% 23%;
+
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 215 25% 27%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 15% 47%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 85% 97%;
+
+    --border: 210 20% 90%;
+    --input: 210 20% 90%;
+    --ring: 40 96% 53%;
+
+    --radius: 0.5rem;
+
+    /* Section backgrounds */
+    --section-alt-bg: 210 20% 98%;
+    --trust-badge-bg: 210 20% 97%;
+    
+    /* CTA Banner - Dark navy blue */
+    --cta-banner-bg: 213 50% 20%;
+    --cta-banner-light: 213 45% 28%;
+
+    /* Chart colors */
+    --chart-1: 40 96% 53%;
+    --chart-2: 215 50% 23%;
+    --chart-3: 210 20% 60%;
+    --chart-4: 40 80% 60%;
+    --chart-5: 210 15% 75%;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 215 25% 27%;
+    --sidebar-primary: 40 96% 53%;
+    --sidebar-primary-foreground: 215 50% 23%;
+    --sidebar-accent: 210 20% 96%;
+    --sidebar-accent-foreground: 215 25% 27%;
+    --sidebar-border: 210 20% 90%;
+    --sidebar-ring: 40 96% 53%;
+  }
+
+  .dark {
+    --background: 215 50% 10%;
+    --foreground: 0 0% 98%;
+    --card: 215 45% 15%;
+    --card-foreground: 0 0% 98%;
+    --popover: 215 45% 15%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 40 96% 53%;
+    --primary-foreground: 215 50% 10%;
+    --secondary: 215 40% 20%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 215 40% 25%;
+    --muted-foreground: 0 0% 75%;
+    --accent: 40 96% 53%;
+    --accent-foreground: 215 50% 10%;
+    --border: 215 35% 25%;
+    --input: 215 35% 25%;
+    --ring: 40 96% 53%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 85% 97%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold text-primary;
+  }
+}
+
+@layer components {
+  .section-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Hero with light background and image overlay */
+  .hero-section {
+    @apply bg-background relative;
+  }
+
+  /* CTA Banner dark blue gradient */
+  .cta-banner-gradient {
+    background: linear-gradient(135deg, hsl(var(--cta-banner-bg)) 0%, hsl(var(--cta-banner-light)) 100%);
+  }
+
+  /* Trust badge pill style - light gray with border */
+  .trust-badge {
+    @apply bg-white px-4 py-2.5 rounded-lg flex items-center gap-2 text-sm font-medium text-foreground border border-border;
+  }
+
+  /* Card shadows matching the images */
+  .card-shadow {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+
+  .card-shadow-lg {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  }
+
+  .card-hover {
+    @apply transition-all duration-300;
+  }
+
+  .card-hover:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.06);
+    transform: translateY(-2px);
+  }
+
+  /* Primary button - Yellow/Amber */
+  .btn-primary {
+    @apply bg-accent text-accent-foreground font-semibold px-6 py-3 rounded-md inline-flex items-center gap-2 transition-colors;
+  }
+
+  .btn-primary:hover {
+    @apply bg-accent/90;
+  }
+
+  /* Secondary button - Outlined */
+  .btn-secondary {
+    @apply bg-white text-foreground font-semibold px-6 py-3 rounded-md border border-border inline-flex items-center gap-2 transition-colors;
+  }
+
+  .btn-secondary:hover {
+    @apply bg-secondary;
+  }
+
+  /* Step number badge */
+  .step-badge {
+    @apply w-7 h-7 bg-accent text-accent-foreground rounded-full flex items-center justify-center text-xs font-bold;
+  }
+
+  /* Icon container - Yellow background */
+  .icon-container {
+    @apply w-12 h-12 bg-accent/15 rounded-lg flex items-center justify-center;
+  }
+
+  .icon-container-circle {
+    @apply w-10 h-10 bg-accent rounded-full flex items-center justify-center;
+  }
+}
