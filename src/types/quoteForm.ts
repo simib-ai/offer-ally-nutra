@@ -79,11 +79,11 @@ export const supplementTypes = [
 // Quantity ranges
 export const quantityRanges = [
   'Less than 2,000 units',
-  '2,000 - 5,000 units',
-  '5,000 - 10,000 units',
-  '10,000 - 25,000 units',
-  '25,000 - 50,000 units',
-  '50,000 - 100,000 units',
+  '2,000 – 5,000 units',
+  '5,000 – 10,000 units',
+  '10,000 – 25,000 units',
+  '25,000 – 50,000 units',
+  '50,000 – 100,000 units',
   '100,000+ units',
 ];
 

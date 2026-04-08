@@ -1,8 +1,38 @@
 import { ArrowRight, Calendar } from "lucide-react";
+import { useState, useEffect } from "react";
 import AppLink from "@/components/AppLink";
 import heroBackground from "@/assets/hero-background.png";
 
+function getSecondsUntilMidnight(): number {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0);
+  return Math.max(0, Math.floor((midnight.getTime() - now.getTime()) / 1000));
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const safe = Math.max(0, totalSeconds);
+  const h = Math.floor(safe / 3600);
+  const m = Math.floor((safe % 3600) / 60);
+  const s = safe % 60;
+  return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
+}
+
 const HeroSection = () => {
+  const [secondsLeft, setSecondsLeft] = useState(getSecondsUntilMidnight);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        const next = prev - 1;
+        if (next <= 0) {
+          return getSecondsUntilMidnight();
+        }
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
   return (
     <section id="hero" className="relative overflow-hidden min-h-[500px] lg:min-h-[600px]">
       {/* Background image - covers entire hero */}
@@ -58,6 +88,14 @@ const HeroSection = () => {
                 <Calendar className="w-4 h-4" />
                 Schedule a Call
               </AppLink>
+            </div>
+
+            {/* Countdown timer */}
+            <div className="mt-6 flex items-center gap-3">
+              <span className="text-sm text-muted-foreground font-medium">Today's offer ends in:</span>
+              <span className="font-mono text-lg font-bold text-accent tabular-nums">
+                {formatCountdown(secondsLeft)}
+              </span>
             </div>
           </div>
         </div>
