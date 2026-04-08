@@ -14,7 +14,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename="/offer-ally-nutra">
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/quote" element={<Quote />} />
