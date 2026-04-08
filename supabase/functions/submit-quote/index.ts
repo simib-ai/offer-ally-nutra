@@ -36,8 +36,17 @@ const WEBHOOK_URL = 'https://webhook.simibrown.cloud/webhook/ally_nutra';
 const RECAPTCHA_VERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify';
 const MIN_SCORE_THRESHOLD = 0.5;
 
-const MAIN_SUPABASE_URL = Deno.env.get('MAIN_SUPABASE_URL');
-const MAIN_SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('MAIN_SUPABASE_SERVICE_ROLE_KEY');
+/** Prefer MAIN_* when leads live in another Supabase project; else use platform-injected SUPABASE_* (same project as this function). */
+function resolveMainDbCredentials(): { url: string; serviceKey: string; source: 'MAIN_*' | 'SUPABASE_*' } {
+  const mainUrl = Deno.env.get('MAIN_SUPABASE_URL');
+  const mainKey = Deno.env.get('MAIN_SUPABASE_SERVICE_ROLE_KEY');
+  if (mainUrl && mainKey) {
+    return { url: mainUrl, serviceKey: mainKey, source: 'MAIN_*' };
+  }
+  const url = Deno.env.get('SUPABASE_URL') ?? '';
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  return { url, serviceKey, source: 'SUPABASE_*' };
+}
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const ADMIN_NOTIFICATION_EMAIL = 'simi.b@allynutra.com';
@@ -118,14 +127,16 @@ async function sendAdminErrorNotification(error: string, formData: Record<string
 
 // ── Supabase insert ──
 async function insertLead(formData: Record<string, unknown>): Promise<{ success: boolean; lead_id?: string; error?: string }> {
-  if (!MAIN_SUPABASE_URL || !MAIN_SUPABASE_SERVICE_ROLE_KEY) {
+  const { url: dbUrl, serviceKey: dbServiceKey, source: credSource } = resolveMainDbCredentials();
+  if (!dbUrl || !dbServiceKey) {
     const msg = 'Main Supabase credentials not configured';
-    console.error(`${LOG_FAIL} ${msg}`);
+    console.error(`${LOG_FAIL} ${msg} (set MAIN_SUPABASE_URL + MAIN_SUPABASE_SERVICE_ROLE_KEY via secrets, or deploy on a Supabase project so SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are available)`);
     return { success: false, error: msg };
   }
+  console.log(`${LOG} DB insert using credentials source: ${credSource}`);
 
   try {
-    const mainSupabase = createClient(MAIN_SUPABASE_URL, MAIN_SUPABASE_SERVICE_ROLE_KEY);
+    const mainSupabase = createClient(dbUrl, dbServiceKey);
 
     // ── STRICT WHITELIST: Only known columns in public.leads ──
     // All tracking/attribution fields go into 'tracking' JSONB column.

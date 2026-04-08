@@ -1,2 +1,7 @@
 # Must match VITE_SUPABASE_URL project ref so `supabase functions deploy` targets the same project as the app.
 project_id = "dxoljsccupfiqjccjeze"
+
+# New Supabase publishable keys (sb_publishable_…) are not JWTs; Edge Functions default JWT check rejects them.
+# This public lead endpoint is already gated by reCAPTCHA, honeypot, and rate limits inside the function.
+[functions.submit-quote]
+verify_jwt = false

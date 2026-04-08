@@ -20,6 +20,12 @@ import type { QuoteFormData } from '@/types/quoteForm';
 
 const LOG_PREFIX = '[CRITICAL_LEAD_FLOW]';
 
+/** Legacy anon/service keys are JWTs (3 dot-separated segments, typically start with eyJ). New publishable keys (sb_publishable_…) must NOT be sent as Bearer — gateway rejects with 401. */
+function isLegacySupabaseJwtApiKey(key: string): boolean {
+  if (!key.startsWith('eyJ')) return false;
+  return key.split('.').length === 3;
+}
+
 interface SubmitLeadOptions {
   formData: QuoteFormData;
   recaptchaToken: string;
@@ -156,6 +162,17 @@ export async function submitLead(options: SubmitLeadOptions): Promise<SubmitLead
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
     const functionUrl = `${supabaseUrl}/functions/v1/submit-quote`;
+    const rawKey = supabaseAnonKey == null ? '' : String(supabaseAnonKey);
+    const trimmedKey = rawKey.trim();
+    const useJwtBearer = isLegacySupabaseJwtApiKey(trimmedKey);
+
+    const requestHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      apikey: trimmedKey,
+    };
+    if (useJwtBearer) {
+      requestHeaders.Authorization = `Bearer ${trimmedKey}`;
+    }
 
     // #region agent log
     {
@@ -165,20 +182,26 @@ export async function submitLead(options: SubmitLeadOptions): Promise<SubmitLead
       } catch {
         urlHost = 'parse_error';
       }
+      const dotParts = trimmedKey.split('.');
       fetch('http://127.0.0.1:7413/ingest/822cda9a-6643-4439-a3b5-b357ecbe2d35', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '363d8c' },
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '17b1f9' },
         body: JSON.stringify({
-          sessionId: '363d8c',
-          runId: 'pre-fix',
-          hypothesisId: 'H1',
+          sessionId: '17b1f9',
+          runId: 'post-fix',
+          hypothesisId: 'H1-H2',
           location: 'submitLead.ts:pre-fetch',
-          message: 'Env and URL shape before edge fetch',
+          message: 'Env + key kind before edge fetch (no secret values)',
           data: {
             hasSupabaseUrl: Boolean(supabaseUrl),
             urlHost,
-            functionPathSuffix: '/functions/v1/submit-quote',
-            hasAnonKey: Boolean(supabaseAnonKey),
+            hasAnonKey: Boolean(trimmedKey),
+            anonKeyLen: rawKey.length,
+            anonKeyTrimLen: trimmedKey.length,
+            trimDiff: rawKey.length - trimmedKey.length,
+            jwtSegmentCount: dotParts.length,
+            keyKind: useJwtBearer ? 'legacy_jwt' : 'opaque_publishable',
+            sendsAuthorizationBearer: useJwtBearer,
             functionUrlLength: functionUrl.length,
           },
           timestamp: Date.now(),
@@ -189,16 +212,43 @@ export async function submitLead(options: SubmitLeadOptions): Promise<SubmitLead
 
     const fetchResponse = await fetch(functionUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseAnonKey}`,
-        'apikey': supabaseAnonKey,
-      },
+      headers: requestHeaders,
       body: JSON.stringify(payload),
     });
 
     const responseText = await fetchResponse.text();
     console.log(`${LOG_PREFIX} [DEBUG] HTTP ${fetchResponse.status} raw body:`, responseText);
+
+    // #region agent log
+    {
+      let parsedMsg: string | null = null;
+      try {
+        const j = JSON.parse(responseText) as { message?: string; code?: number };
+        parsedMsg = typeof j?.message === 'string' ? j.message : null;
+      } catch {
+        parsedMsg = null;
+      }
+      fetch('http://127.0.0.1:7413/ingest/822cda9a-6643-4439-a3b5-b357ecbe2d35', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '17b1f9' },
+        body: JSON.stringify({
+          sessionId: '17b1f9',
+          runId: 'post-fix',
+          hypothesisId: 'H3-H4',
+          location: 'submitLead.ts:post-fetch',
+          message: 'Edge function HTTP result (no body secrets)',
+          data: {
+            httpStatus: fetchResponse.status,
+            ok: fetchResponse.ok,
+            responseBodyLen: responseText.length,
+            parsedMessage: parsedMsg,
+            is401: fetchResponse.status === 401,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
 
     let serverPayload: Record<string, unknown> | null = null;
     try {
@@ -238,11 +288,11 @@ export async function submitLead(options: SubmitLeadOptions): Promise<SubmitLead
       const err = caughtError instanceof Error ? caughtError : null;
       fetch('http://127.0.0.1:7413/ingest/822cda9a-6643-4439-a3b5-b357ecbe2d35', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '363d8c' },
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '17b1f9' },
         body: JSON.stringify({
-          sessionId: '363d8c',
-          runId: 'pre-fix',
-          hypothesisId: 'H2-H5',
+          sessionId: '17b1f9',
+          runId: 'post-fix',
+          hypothesisId: 'H5',
           location: 'submitLead.ts:catch',
           message: 'submitLead catch (fetch/network layer)',
           data: {
