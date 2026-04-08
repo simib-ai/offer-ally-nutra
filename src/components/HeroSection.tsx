@@ -82,7 +82,7 @@ const HeroSection = () => {
                 <ArrowRight className="w-4 h-4" />
               </AppLink>
               <AppLink
-                to="/quote"
+                to="/schedule-call"
                 className="bg-white hover:bg-secondary text-foreground font-semibold px-6 py-3 rounded-md border border-border inline-flex items-center gap-2 transition-colors w-fit"
               >
                 <Calendar className="w-4 h-4" />
