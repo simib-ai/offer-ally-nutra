@@ -1,1 +1,2 @@
-project_id = "dlgeydrvyjchpopafuru"
+# Must match VITE_SUPABASE_URL project ref so `supabase functions deploy` targets the same project as the app.
+project_id = "dxoljsccupfiqjccjeze"

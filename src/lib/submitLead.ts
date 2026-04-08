@@ -157,6 +157,36 @@ export async function submitLead(options: SubmitLeadOptions): Promise<SubmitLead
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
     const functionUrl = `${supabaseUrl}/functions/v1/submit-quote`;
 
+    // #region agent log
+    {
+      let urlHost = 'missing_or_invalid';
+      try {
+        if (supabaseUrl) urlHost = new URL(String(supabaseUrl)).hostname;
+      } catch {
+        urlHost = 'parse_error';
+      }
+      fetch('http://127.0.0.1:7413/ingest/822cda9a-6643-4439-a3b5-b357ecbe2d35', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '363d8c' },
+        body: JSON.stringify({
+          sessionId: '363d8c',
+          runId: 'pre-fix',
+          hypothesisId: 'H1',
+          location: 'submitLead.ts:pre-fetch',
+          message: 'Env and URL shape before edge fetch',
+          data: {
+            hasSupabaseUrl: Boolean(supabaseUrl),
+            urlHost,
+            functionPathSuffix: '/functions/v1/submit-quote',
+            hasAnonKey: Boolean(supabaseAnonKey),
+            functionUrlLength: functionUrl.length,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
+
     const fetchResponse = await fetch(functionUrl, {
       method: 'POST',
       headers: {
@@ -203,6 +233,28 @@ export async function submitLead(options: SubmitLeadOptions): Promise<SubmitLead
       formEmail: formData.email,
       timestamp: new Date().toISOString(),
     });
+    // #region agent log
+    {
+      const err = caughtError instanceof Error ? caughtError : null;
+      fetch('http://127.0.0.1:7413/ingest/822cda9a-6643-4439-a3b5-b357ecbe2d35', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '363d8c' },
+        body: JSON.stringify({
+          sessionId: '363d8c',
+          runId: 'pre-fix',
+          hypothesisId: 'H2-H5',
+          location: 'submitLead.ts:catch',
+          message: 'submitLead catch (fetch/network layer)',
+          data: {
+            errName: err?.name ?? 'non-Error',
+            errMessage: err?.message?.slice(0, 120) ?? String(caughtError).slice(0, 120),
+            online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
     return { success: false, error: { message, details: null, status: null } };
   }
 }
