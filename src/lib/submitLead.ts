@@ -14,7 +14,6 @@
  * ═══════════════════════════════════════════════════════════════════
  */
 
-import { supabase } from '@/integrations/supabase/client';
 import { forceRefreshAttribution, type AttributionParams } from '@/hooks/useAttribution';
 import type { QuoteFormData } from '@/types/quoteForm';
 
@@ -174,42 +173,6 @@ export async function submitLead(options: SubmitLeadOptions): Promise<SubmitLead
       requestHeaders.Authorization = `Bearer ${trimmedKey}`;
     }
 
-    // #region agent log
-    {
-      let urlHost = 'missing_or_invalid';
-      try {
-        if (supabaseUrl) urlHost = new URL(String(supabaseUrl)).hostname;
-      } catch {
-        urlHost = 'parse_error';
-      }
-      const dotParts = trimmedKey.split('.');
-      fetch('http://127.0.0.1:7413/ingest/822cda9a-6643-4439-a3b5-b357ecbe2d35', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '17b1f9' },
-        body: JSON.stringify({
-          sessionId: '17b1f9',
-          runId: 'post-fix',
-          hypothesisId: 'H1-H2',
-          location: 'submitLead.ts:pre-fetch',
-          message: 'Env + key kind before edge fetch (no secret values)',
-          data: {
-            hasSupabaseUrl: Boolean(supabaseUrl),
-            urlHost,
-            hasAnonKey: Boolean(trimmedKey),
-            anonKeyLen: rawKey.length,
-            anonKeyTrimLen: trimmedKey.length,
-            trimDiff: rawKey.length - trimmedKey.length,
-            jwtSegmentCount: dotParts.length,
-            keyKind: useJwtBearer ? 'legacy_jwt' : 'opaque_publishable',
-            sendsAuthorizationBearer: useJwtBearer,
-            functionUrlLength: functionUrl.length,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
-
     const fetchResponse = await fetch(functionUrl, {
       method: 'POST',
       headers: requestHeaders,
@@ -218,37 +181,6 @@ export async function submitLead(options: SubmitLeadOptions): Promise<SubmitLead
 
     const responseText = await fetchResponse.text();
     console.log(`${LOG_PREFIX} [DEBUG] HTTP ${fetchResponse.status} raw body:`, responseText);
-
-    // #region agent log
-    {
-      let parsedMsg: string | null = null;
-      try {
-        const j = JSON.parse(responseText) as { message?: string; code?: number };
-        parsedMsg = typeof j?.message === 'string' ? j.message : null;
-      } catch {
-        parsedMsg = null;
-      }
-      fetch('http://127.0.0.1:7413/ingest/822cda9a-6643-4439-a3b5-b357ecbe2d35', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '17b1f9' },
-        body: JSON.stringify({
-          sessionId: '17b1f9',
-          runId: 'post-fix',
-          hypothesisId: 'H3-H4',
-          location: 'submitLead.ts:post-fetch',
-          message: 'Edge function HTTP result (no body secrets)',
-          data: {
-            httpStatus: fetchResponse.status,
-            ok: fetchResponse.ok,
-            responseBodyLen: responseText.length,
-            parsedMessage: parsedMsg,
-            is401: fetchResponse.status === 401,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
 
     let serverPayload: Record<string, unknown> | null = null;
     try {
@@ -283,28 +215,6 @@ export async function submitLead(options: SubmitLeadOptions): Promise<SubmitLead
       formEmail: formData.email,
       timestamp: new Date().toISOString(),
     });
-    // #region agent log
-    {
-      const err = caughtError instanceof Error ? caughtError : null;
-      fetch('http://127.0.0.1:7413/ingest/822cda9a-6643-4439-a3b5-b357ecbe2d35', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '17b1f9' },
-        body: JSON.stringify({
-          sessionId: '17b1f9',
-          runId: 'post-fix',
-          hypothesisId: 'H5',
-          location: 'submitLead.ts:catch',
-          message: 'submitLead catch (fetch/network layer)',
-          data: {
-            errName: err?.name ?? 'non-Error',
-            errMessage: err?.message?.slice(0, 120) ?? String(caughtError).slice(0, 120),
-            online: typeof navigator !== 'undefined' ? navigator.onLine : null,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
     return { success: false, error: { message, details: null, status: null } };
   }
 }

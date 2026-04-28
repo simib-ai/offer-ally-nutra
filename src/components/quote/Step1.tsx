@@ -1,5 +1,5 @@
 import { UseFormReturn } from 'react-hook-form';
-import { ClipboardCheck, Lightbulb, HelpCircle } from 'lucide-react';
+import { ClipboardCheck, Lightbulb } from 'lucide-react';
 import FormCard from './FormCard';
 import RadioCard from './RadioCard';
 import { QuoteFormData, supplementTypes, quantityRanges } from '@/types/quoteForm';
@@ -24,20 +24,14 @@ const Step1 = ({ form }: Step1Props) => {
     {
       value: 'complete' as const,
       icon: <ClipboardCheck className="w-5 h-5" />,
-      title: 'I have a complete formulation',
+      title: 'I have my formula ready',
       description: 'Ready with ingredient list, dosages, and specifications',
     },
     {
       value: 'general_idea' as const,
       icon: <Lightbulb className="w-5 h-5" />,
-      title: 'I have a general idea',
-      description: 'Know some ingredients or concepts but need refinement',
-    },
-    {
-      value: 'need_help' as const,
-      icon: <HelpCircle className="w-5 h-5" />,
-      title: 'I need help developing a formulation',
-      description: 'Our team will help create a custom formula for your needs',
+      title: 'I have an idea but need help refining it',
+      description: "We'll show you a few ways to connect with our team",
     },
   ];
 
