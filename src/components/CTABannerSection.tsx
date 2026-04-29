@@ -36,8 +36,8 @@ const CTABannerSection = () => {
               Get Instant Quote
               <ArrowRight className="w-4 h-4" />
             </AppLink>
-            <AppLink 
-              to="/quote"
+            <AppLink
+              to="/schedule-call"
               className="bg-transparent hover:bg-white/10 text-white font-semibold px-6 py-3 rounded-md border border-white/30 inline-flex items-center gap-2 transition-colors"
             >
               <Calendar className="w-4 h-4" />

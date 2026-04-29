@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { Plus, Trash2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
@@ -6,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QuoteFormData, Ingredient, unitOptions } from '@/types/quoteForm';
-import { cn } from '@/lib/utils';
+import { IngredientCombobox } from './IngredientCombobox';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Step3Props {
   form: UseFormReturn<QuoteFormData>;
@@ -15,13 +17,32 @@ interface Step3Props {
 const Step3 = ({ form }: Step3Props) => {
   const { watch, setValue, register } = form;
   const ingredients = watch('ingredients') || [];
+  const [ingredientNames, setIngredientNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function fetchIngredients() {
+      const { data } = await supabase
+        .from('ingredient_prices')
+        .select('ingredient_name')
+        .eq('is_archived', false)
+        .order('ingredient_name');
+      if (data) {
+        setIngredientNames(data.map((d) => d.ingredient_name));
+      }
+    }
+    fetchIngredients();
+  }, []);
 
   const addIngredient = () => {
-    setValue('ingredients', [...ingredients, { id: crypto.randomUUID(), name: '', amount: '', unit: 'mg' }]);
+    if (ingredients.length < 30) {
+      setValue('ingredients', [...ingredients, { id: crypto.randomUUID(), name: '', amount: '', unit: 'mg' }]);
+    }
   };
 
   const removeIngredient = (id: string) => {
-    setValue('ingredients', ingredients.filter((ing) => ing.id !== id));
+    if (ingredients.length > 1) {
+      setValue('ingredients', ingredients.filter((ing) => ing.id !== id));
+    }
   };
 
   const updateIngredient = (id: string, field: keyof Ingredient, value: string) => {
@@ -36,58 +57,71 @@ const Step3 = ({ form }: Step3Props) => {
           Your Formulation <span className="text-destructive">*</span>
         </Label>
 
-        {/* Column headers */}
-        <div className="grid grid-cols-12 gap-2 text-xs text-muted-foreground font-medium px-1">
-          <div className="col-span-5">Raw Material</div>
-          <div className="col-span-3">Amount/Serving <span className="text-destructive">*</span></div>
-          <div className="col-span-3">Unit</div>
-          <div className="col-span-1" />
+        {/* Column headers — desktop */}
+        <div className="hidden sm:grid sm:grid-cols-[1fr,120px,90px,40px] gap-2 text-xs text-muted-foreground font-medium px-1">
+          <span>Raw Material</span>
+          <span>Amount/Serving <span className="text-destructive">*</span></span>
+          <span>Unit</span>
+          <span />
         </div>
 
-        {ingredients.map((ingredient) => (
-          <div key={ingredient.id} className="grid grid-cols-12 gap-2 items-center">
-            <div className="col-span-5">
-              <Input
-                placeholder="e.g., Vitamin C"
-                value={ingredient.name}
-                onChange={(e) => updateIngredient(ingredient.id, 'name', e.target.value)}
-                className={cn('bg-white border-border', ingredient.name && 'border-accent/50')}
-              />
-            </div>
-            <div className="col-span-3">
-              <Input
-                placeholder="e.g., 1000"
-                value={ingredient.amount || ''}
-                onChange={(e) => updateIngredient(ingredient.id, 'amount', e.target.value)}
-                className="bg-white border-border"
-              />
-            </div>
-            <div className="col-span-3">
-              <Select value={ingredient.unit} onValueChange={(v) => updateIngredient(ingredient.id, 'unit', v)}>
-                <SelectTrigger className="bg-white border-border"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-white z-50">
-                  {unitOptions.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="col-span-1">
-              {ingredients.length > 1 && (
-                <button type="button" onClick={() => removeIngredient(ingredient.id)}
-                  className="p-2 text-muted-foreground hover:text-destructive transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+        <div className="space-y-2">
+          {ingredients.map((ingredient, index) => (
+            <div
+              key={ingredient.id}
+              className="grid gap-2 p-2 sm:p-0 rounded-lg sm:rounded-none border sm:border-0 grid-cols-1 sm:grid-cols-[1fr,120px,90px,40px]"
+            >
+              {/* Mobile row label */}
+              <div className="sm:hidden text-xs text-muted-foreground font-medium mb-1">
+                Ingredient {index + 1}
+              </div>
 
-        <Button type="button" onClick={addIngredient} variant="outline"
-          className="w-full border-dashed">
+              <IngredientCombobox
+                value={ingredient.name}
+                onSelect={(name) => updateIngredient(ingredient.id, 'name', name)}
+                ingredientNames={ingredientNames}
+              />
+
+              <div className="flex gap-2 sm:contents">
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="e.g., 1000"
+                  value={ingredient.amount || ''}
+                  onChange={(e) => updateIngredient(ingredient.id, 'amount', e.target.value)}
+                  className="h-9 text-sm flex-1 sm:flex-none"
+                />
+                <Select value={ingredient.unit} onValueChange={(v) => updateIngredient(ingredient.id, 'unit', v)}>
+                  <SelectTrigger className="h-9 text-sm w-[80px] sm:w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unitOptions.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex justify-end sm:justify-start">
+                {ingredients.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeIngredient(ingredient.id)}
+                    className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <Button type="button" onClick={addIngredient} variant="outline" className="w-full border-dashed">
           <Plus className="w-4 h-4 mr-2" />
           Add Ingredient
         </Button>
         <p className="text-xs text-muted-foreground">
-          Select each raw material and enter its amount per serving. You can add up to 30 ingredients.
+          Select each raw material from the list and enter its amount per serving. You can add up to 30 ingredients.
         </p>
       </div>
 

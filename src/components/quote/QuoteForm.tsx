@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useNavigate } from 'react-router-dom';
 import { ArrowRight, ArrowLeft, Loader2, CheckCircle, CalendarDays, Phone, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import StepIndicator from './StepIndicator';
@@ -45,6 +46,7 @@ const QuoteForm = () => {
   const [showContactOptions, setShowContactOptions] = useState(false);
   const [honeypot, setHoneypot] = useState('');
   const [debugError, setDebugError] = useState<Record<string, unknown> | null>(null);
+  const navigate = useNavigate();
 
   useAttribution();
 
@@ -323,7 +325,7 @@ const QuoteForm = () => {
 
           <div
             className="border border-border rounded-xl p-4 cursor-pointer transition-all hover:shadow-md hover:border-primary/40 active:scale-[0.99]"
-            onClick={() => { window.location.href = '/schedule-call'; }}
+            onClick={() => navigate('/schedule-call')}
           >
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
