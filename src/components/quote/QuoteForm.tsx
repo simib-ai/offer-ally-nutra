@@ -2,7 +2,7 @@
  * ═══════════════════════════════════════════════════════════════════
  * CRITICAL BUSINESS FLOW — FORM UI
  * ═══════════════════════════════════════════════════════════════════
- * This component renders the 3-step quote form.
+ * This component renders the 5-step quote form.
  * All submission logic is delegated to submitLead() in src/lib/submitLead.ts.
  * DO NOT inline submission logic here.
  * ═══════════════════════════════════════════════════════════════════
@@ -17,7 +17,9 @@ import StepIndicator from './StepIndicator';
 import Step1 from './Step1';
 import Step2 from './Step2';
 import Step3 from './Step3';
-import { QuoteFormData, step1Schema, step2Schema, step3Schema, quoteFormSchema } from '@/types/quoteForm';
+import Step4 from './Step4';
+import Step5 from './Step5';
+import { QuoteFormData, quoteFormSchema } from '@/types/quoteForm';
 import { useAttribution } from '@/hooks/useAttribution';
 import { submitLead } from '@/lib/submitLead';
 import { Button } from '@/components/ui/button';
@@ -34,15 +36,16 @@ const getGrecaptcha = (): GrecaptchaInstance | null => {
   return (window as unknown as { grecaptcha?: GrecaptchaInstance }).grecaptcha || null;
 };
 
+const TOTAL_STEPS = 5;
+
 const QuoteForm = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [showContactOptions, setShowContactOptions] = useState(false);
   const [honeypot, setHoneypot] = useState('');
-  // [CRITICAL_LEAD_FLOW][DEBUG_UI] Temporary debug panel state — REMOVE after diagnosis
   const [debugError, setDebugError] = useState<Record<string, unknown> | null>(null);
-  // Attribution tracking (captures on mount + SPA navigation)
+
   useAttribution();
 
   const form = useForm<QuoteFormData>({
@@ -51,75 +54,66 @@ const QuoteForm = () => {
       formulationStatus: undefined,
       email: '',
       phone: '',
-      supplementType: '',
-      quantity: '',
       deliveryFormat: '',
+      capsuleType: '',
+      capsuleTypeOther: '',
+      tabletType: '',
+      tabletTypeOther: '',
+      unitsPerBox: '',
+      unitsPerBoxOther: '',
+      pouchVolume: '',
+      pouchVolumeOther: '',
+      quantity: '',
       ingredients: [{ id: crypto.randomUUID(), name: '', amount: '', unit: 'mg' }],
       servingSize: '',
       servingsPerContainer: '',
+      formulationDetails: '',
+      bottleType: '',
+      bottleTypeOther: '',
+      bottleSize: '',
+      bottleSizeOther: '',
+      bottleColor: '',
+      bottleColorOther: '',
+      lidType: '',
+      lidTypeOther: '',
+      lidColor: '',
+      lidColorOther: '',
       materialType: '',
-      unitsPerBox: '',
-      netWeight: '',
+      materialTypeOther: '',
+      pouchSize: '',
+      pouchSizeOther: '',
+      closureType: '',
+      closureTypeOther: '',
       packageDimensions: '',
-      includeDisplayBox: false,
+      netWeight: '',
       labelsProvidedBy: '',
+      labelsProvidedByOther: '',
       graphicDesignBy: '',
-      additionalComments: '',
+      graphicDesignByOther: '',
+      message: '',
       fullName: '',
       company: '',
-      marketingConsent: false,
-      emailConsent: false,
+      smsConsent: false,
     },
     mode: 'onChange',
   });
 
-  const validateCurrentStep = async () => {
-    const values = form.getValues();
-
-    try {
-      if (currentStep === 1) {
-        await step1Schema.parseAsync({
-          formulationStatus: values.formulationStatus,
-          email: values.email,
-          phone: values.phone,
-        });
-        return true;
-      } else if (currentStep === 2) {
-        await step2Schema.parseAsync({
-          supplementType: values.supplementType,
-          quantity: values.quantity,
-          deliveryFormat: values.deliveryFormat,
-          ingredients: values.ingredients,
-          servingSize: values.servingSize,
-          servingsPerContainer: values.servingsPerContainer,
-        });
-        return true;
-      } else if (currentStep === 3) {
-        await step3Schema.parseAsync({
-          materialType: values.materialType,
-          unitsPerBox: values.unitsPerBox,
-          netWeight: values.netWeight,
-          packageDimensions: values.packageDimensions,
-          includeDisplayBox: values.includeDisplayBox,
-          labelsProvidedBy: values.labelsProvidedBy,
-          graphicDesignBy: values.graphicDesignBy,
-          additionalComments: values.additionalComments,
-          fullName: values.fullName,
-          company: values.company,
-          marketingConsent: values.marketingConsent,
-          emailConsent: values.emailConsent,
-        });
-        return true;
-      }
-    } catch {
-      if (currentStep === 1) {
-        form.trigger(['formulationStatus', 'email', 'phone']);
-      } else if (currentStep === 2) {
-        form.trigger(['deliveryFormat', 'ingredients']);
-      } else if (currentStep === 3) {
-        form.trigger(['fullName']);
-      }
-      return false;
+  const validateCurrentStep = async (): Promise<boolean> => {
+    if (currentStep === 1) {
+      const valid = await form.trigger(['formulationStatus', 'email', 'phone']);
+      return valid;
+    }
+    if (currentStep === 2) {
+      const valid = await form.trigger(['deliveryFormat']);
+      return valid;
+    }
+    // Steps 3 and 4 have no hard-required fields — always pass
+    if (currentStep === 3 || currentStep === 4) {
+      return true;
+    }
+    if (currentStep === 5) {
+      const valid = await form.trigger(['fullName']);
+      return valid;
     }
     return true;
   };
@@ -128,7 +122,6 @@ const QuoteForm = () => {
     const isValid = await validateCurrentStep();
     if (!isValid) return;
 
-    // After step 1, check formulationStatus
     if (currentStep === 1) {
       const formulationStatus = form.getValues('formulationStatus');
       if (formulationStatus === 'general_idea') {
@@ -138,7 +131,7 @@ const QuoteForm = () => {
       }
     }
 
-    if (currentStep < 3) {
+    if (currentStep < TOTAL_STEPS) {
       setCurrentStep((prev) => prev + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -156,6 +149,72 @@ const QuoteForm = () => {
     }
   };
 
+  const executeRecaptcha = (): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const grecaptcha = getGrecaptcha();
+      if (!grecaptcha) {
+        reject(new Error('reCAPTCHA not loaded. Please refresh and try again.'));
+        return;
+      }
+      grecaptcha.ready(() => {
+        grecaptcha
+          .execute(RECAPTCHA_SITE_KEY, { action: 'quote_submit' })
+          .then(resolve)
+          .catch(reject);
+      });
+    });
+  };
+
+  const handleSubmit = async (e?: React.MouseEvent) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+
+    const isValid = await validateCurrentStep();
+    if (!isValid) return;
+
+    // Ensure fullName is set (fall back to email prefix)
+    const values = form.getValues();
+    if (!values.fullName || values.fullName.trim() === '') {
+      form.setValue('fullName', values.email.split('@')[0] || 'Customer');
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      let recaptchaToken: string;
+      try {
+        recaptchaToken = await executeRecaptcha();
+      } catch (recaptchaError) {
+        console.error('[CRITICAL_LEAD_FLOW] reCAPTCHA execution failed:', recaptchaError);
+        toast.error('Security verification failed. Please refresh the page and try again.');
+        return;
+      }
+
+      const result = await submitLead({
+        formData: form.getValues(),
+        recaptchaToken,
+        honeypot,
+      });
+
+      if (result.success) {
+        setIsSuccess(true);
+        form.reset();
+        return;
+      }
+
+      const err = result.error!;
+      console.error('[CRITICAL_LEAD_FLOW_FAILURE]', err);
+      const parts = [err.message];
+      if (err.details) parts.push(String(err.details).slice(0, 200));
+      toast.error(parts.join(' — '), { duration: 15000 });
+      setDebugError(err as unknown as Record<string, unknown>);
+    } catch (unexpectedError) {
+      console.error('[CRITICAL_LEAD_FLOW_FAILURE] Unexpected error in handleSubmit:', unexpectedError);
+      toast.error('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSendMessage = async () => {
     setIsSubmitting(true);
     try {
@@ -168,11 +227,9 @@ const QuoteForm = () => {
         return;
       }
 
-      // For general_idea quick-submit: use email prefix as fullName if not set
       const values = form.getValues();
       if (!values.fullName || values.fullName.trim() === '') {
-        const emailPrefix = values.email.split('@')[0] || 'Customer';
-        form.setValue('fullName', emailPrefix);
+        form.setValue('fullName', values.email.split('@')[0] || 'Customer');
       }
 
       const result = await submitLead({
@@ -200,99 +257,6 @@ const QuoteForm = () => {
     }
   };
 
-  const executeRecaptcha = (): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const grecaptcha = getGrecaptcha();
-      if (!grecaptcha) {
-        reject(new Error('reCAPTCHA not loaded. Please refresh and try again.'));
-        return;
-      }
-
-      grecaptcha.ready(() => {
-        grecaptcha
-          .execute(RECAPTCHA_SITE_KEY, { action: 'quote_submit' })
-          .then(resolve)
-          .catch(reject);
-      });
-    });
-  };
-
-  /**
-   * CRITICAL: This handler delegates ALL submission logic to submitLead().
-   * It only handles UI concerns: validation trigger, loading state, feedback.
-   */
-  const handleSubmit = async (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    const isValid = await validateCurrentStep();
-    if (!isValid) return;
-
-    setIsSubmitting(true);
-
-    try {
-      // ── reCAPTCHA ──
-      let recaptchaToken: string;
-      try {
-        recaptchaToken = await executeRecaptcha();
-      } catch (recaptchaError) {
-        console.error('[CRITICAL_LEAD_FLOW] reCAPTCHA execution failed:', recaptchaError);
-        toast.error('Security verification failed. Please refresh the page and try again.');
-        return; // finally will reset isSubmitting
-      }
-
-      // ── Delegate to centralized submitLead ──
-      const result = await submitLead({
-        formData: form.getValues(),
-        recaptchaToken,
-        honeypot,
-      });
-
-      if (result.success) {
-        /**
-         * POST-SUBMISSION: Show built-in success screen.
-         * DO NOT redirect to a URL that contains another form (e.g. /quote-requested).
-         * If a real thank-you page is added in the future, set THANK_YOU_URL below
-         * and use: window.location.assign(THANK_YOU_URL);
-         */
-        // const THANK_YOU_URL: string | null = null; // Set to a real thank-you page URL when available
-        setIsSuccess(true);
-        form.reset();
-        return;
-      }
-
-      // ── [CRITICAL_LEAD_FLOW][DEBUG_UI] Surface real error from Edge Function ──
-      const err = result.error!;
-      console.error('[CRITICAL_LEAD_FLOW_FAILURE]', err);
-
-      // Always show message + details in toast (temporary debug mode)
-      const parts = [err.message];
-      if (err.details) parts.push(String(err.details).slice(0, 200));
-      toast.error(parts.join(' — '), { duration: 15000 });
-
-      // [DEBUG_UI] Set debug info for on-page panel
-      setDebugError(err as unknown as Record<string, unknown>);
-
-    } catch (unexpectedError) {
-      // This catch should never be reached because submitLead() catches everything.
-      // But we guard against it for absolute safety — no white screens.
-      console.error('[CRITICAL_LEAD_FLOW_FAILURE] Unexpected error in handleSubmit:', unexpectedError);
-      toast.error('An unexpected error occurred. Please try again.');
-    } finally {
-      // ALWAYS reset loading state unless we're redirecting
-      // (if redirect happened, this line still runs but the page is leaving)
-      setIsSubmitting(false);
-    }
-  };
-
-  /**
-   * handleReturnToHome — full UI reset back to Step 1.
-   * Prevents default anchor/hash navigation, resets all form state,
-   * clears URL hash, and smooth-scrolls to top.
-   * State-driven only. No navigate(), no window.location, no reload.
-   */
   const handleReturnToHome = (e?: React.MouseEvent) => {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     setIsSuccess(false);
@@ -321,18 +285,13 @@ const QuoteForm = () => {
             className="mx-auto block cursor-pointer bg-transparent border-none p-0"
             aria-label="Return to offer"
           >
-            <img
-              src={allyNutraLogo}
-              alt="Ally Nutra logo – return to offer"
-              className="h-10"
-            />
+            <img src={allyNutraLogo} alt="Ally Nutra logo – return to offer" className="h-10" />
           </button>
         </div>
       </div>
     );
   }
 
-  // Contact options view for general_idea path
   if (showContactOptions) {
     return (
       <div className="w-full max-w-2xl mx-auto">
@@ -341,8 +300,6 @@ const QuoteForm = () => {
         </div>
 
         <div className="mb-8 space-y-3">
-
-          {/* Submit a Quote Request — continues to full form */}
           <div
             className="border border-border rounded-xl p-4 cursor-pointer transition-all hover:shadow-md hover:border-primary/40 active:scale-[0.99]"
             onClick={() => {
@@ -364,7 +321,6 @@ const QuoteForm = () => {
             </div>
           </div>
 
-          {/* Schedule a Call */}
           <div
             className="border border-border rounded-xl p-4 cursor-pointer transition-all hover:shadow-md hover:border-primary/40 active:scale-[0.99]"
             onClick={() => { window.location.href = '/schedule-call'; }}
@@ -381,7 +337,6 @@ const QuoteForm = () => {
             </div>
           </div>
 
-          {/* Call Us Now */}
           <a
             href="tel:+18887205888"
             className="block border border-ally-orange/30 bg-ally-orange/5 rounded-xl p-4 cursor-pointer transition-all hover:shadow-md hover:border-ally-orange/60 active:scale-[0.99]"
@@ -399,7 +354,6 @@ const QuoteForm = () => {
           </a>
         </div>
 
-        {/* [CRITICAL_LEAD_FLOW][DEBUG_UI] Temporary debug panel — REMOVE after diagnosis */}
         {debugError && (
           <div className="mt-4 p-4 bg-red-50 border border-red-300 rounded text-xs font-mono text-red-900 overflow-auto max-h-64">
             <div className="font-bold mb-1">[DEBUG_UI] Edge Function Error Details:</div>
@@ -409,12 +363,7 @@ const QuoteForm = () => {
         )}
 
         <div className="flex items-center justify-between gap-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handlePrevious}
-            className="px-6 py-3 border-border"
-          >
+          <Button type="button" variant="outline" onClick={handlePrevious} className="px-6 py-3 border-border">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Previous
           </Button>
@@ -426,12 +375,14 @@ const QuoteForm = () => {
 
   return (
     <div className="w-full max-w-2xl mx-auto">
-      <StepIndicator currentStep={currentStep} totalSteps={3} />
+      <StepIndicator currentStep={currentStep} totalSteps={TOTAL_STEPS} />
 
       <div className="mb-8">
         {currentStep === 1 && <Step1 form={form} />}
         {currentStep === 2 && <Step2 form={form} />}
         {currentStep === 3 && <Step3 form={form} />}
+        {currentStep === 4 && <Step4 form={form} />}
+        {currentStep === 5 && <Step5 form={form} />}
       </div>
 
       {/* Hidden honeypot field */}
@@ -448,7 +399,6 @@ const QuoteForm = () => {
         />
       </div>
 
-      {/* [CRITICAL_LEAD_FLOW][DEBUG_UI] Temporary debug panel — REMOVE after diagnosis */}
       {debugError && (
         <div className="mt-4 p-4 bg-red-50 border border-red-300 rounded text-xs font-mono text-red-900 overflow-auto max-h-64">
           <div className="font-bold mb-1">[DEBUG_UI] Edge Function Error Details:</div>
@@ -459,12 +409,7 @@ const QuoteForm = () => {
 
       <div className="flex items-center justify-between gap-4">
         {currentStep > 1 ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handlePrevious}
-            className="px-6 py-3 border-border"
-          >
+          <Button type="button" variant="outline" onClick={handlePrevious} className="px-6 py-3 border-border">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Previous
           </Button>
@@ -472,12 +417,8 @@ const QuoteForm = () => {
           <div />
         )}
 
-        {currentStep < 3 ? (
-          <Button
-            type="button"
-            onClick={handleNext}
-            className="bg-primary hover:bg-primary/90 text-white px-8 py-3"
-          >
+        {currentStep < TOTAL_STEPS ? (
+          <Button type="button" onClick={handleNext} className="bg-primary hover:bg-primary/90 text-white px-8 py-3">
             Continue
             <ArrowRight className="w-4 h-4 ml-2" />
           </Button>

@@ -47,6 +47,13 @@
     --cta-banner-bg: 213 50% 20%;
     --cta-banner-light: 213 45% 28%;
 
+    /* Ally brand colors */
+    --ally-orange: 39 92% 55%;
+    --ally-navy: 215 60% 22%;
+    --ally-light-navy: 215 55% 40%;
+    --ally-dark: 215 60% 22%;
+    --ally-gray: 240 5% 96%;
+
     /* Chart colors */
     --chart-1: 40 96% 53%;
     --chart-2: 215 50% 23%;

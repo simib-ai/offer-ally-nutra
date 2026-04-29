@@ -1,255 +1,167 @@
 import { UseFormReturn } from 'react-hook-form';
-import { Plus, Trash2, Check, Pill, Square, Zap, Package, ShoppingBag, Star, Droplets, Circle } from 'lucide-react';
-import FormCard from './FormCard';
-import { QuoteFormData, Ingredient, deliveryFormats, unitOptions, quantityRanges } from '@/types/quoteForm';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
+import { CheckCircle2, Pill, Package, Zap, Archive, Tablet } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { LucideIcon } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { QuoteFormData } from '@/types/quoteForm';
+import {
+  deliveryFormatOptions,
+  capsuleTypeOptions,
+  tabletTypeOptions,
+  unitsPerBoxOptions,
+  pouchVolumeOptions,
+} from './quoteOptions';
+
+const formatIcons: Record<string, React.ElementType> = {
+  capsules: Pill,
+  tablets: Tablet,
+  sachets: Package,
+  'stick-packs': Zap,
+  pouches: Archive,
+};
 
 interface Step2Props {
   form: UseFormReturn<QuoteFormData>;
 }
 
-const FORMAT_ICONS: Record<string, LucideIcon> = {
-  capsules: Pill,
-  softgels: Circle,
-  tablets: Square,
-  stick_packs: Zap,
-  sachets: Package,
-  pouches: ShoppingBag,
-  gummies: Star,
-  liquids: Droplets,
-};
-
 const Step2 = ({ form }: Step2Props) => {
-  const { watch, setValue } = form;
-  const ingredients = watch('ingredients') || [];
+  const { watch, setValue, register, formState: { errors } } = form;
   const deliveryFormat = watch('deliveryFormat');
-  const quantity = watch('quantity');
-
-  const addIngredient = () => {
-    const newIngredient: Ingredient = {
-      id: crypto.randomUUID(),
-      name: '',
-      amount: '',
-      unit: 'mg',
-    };
-    setValue('ingredients', [...ingredients, newIngredient]);
-  };
-
-  const removeIngredient = (id: string) => {
-    setValue('ingredients', ingredients.filter((ing) => ing.id !== id));
-  };
-
-  const updateIngredient = (id: string, field: keyof Ingredient, value: string) => {
-    setValue('ingredients', ingredients.map((ing) => (ing.id === id ? { ...ing, [field]: value } : ing)));
-  };
-
-  const clearAllIngredients = () => {
-    setValue('ingredients', [{ id: crypto.randomUUID(), name: '', amount: '', unit: 'mg' }]);
-  };
+  const capsuleType = watch('capsuleType');
+  const tabletType = watch('tabletType');
+  const unitsPerBox = watch('unitsPerBox');
+  const pouchVolume = watch('pouchVolume');
 
   return (
-    <div className="animate-fade-in">
-      <FormCard>
-        <div className="mb-6">
-          <h3 className="text-xl font-bold text-primary mb-2">Your Supplement</h3>
-          <p className="text-muted-foreground">Type and formulation details</p>
-        </div>
-
-        <div className="space-y-6">
-          {/* Delivery Format — visual card grid */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-foreground">
-              Delivery Format <span className="text-destructive">*</span>
-            </Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {deliveryFormats.map((format) => {
-                const isSelected = deliveryFormat === format.value;
-                const Icon = FORMAT_ICONS[format.value] ?? Package;
-                return (
-                  <div
-                    key={format.value}
-                    onClick={() => setValue('deliveryFormat', format.value, { shouldValidate: true })}
-                    className={cn(
-                      'flex items-center gap-3 border rounded-xl p-3 cursor-pointer transition-all hover:shadow-sm active:scale-[0.99]',
-                      isSelected
-                        ? 'border-ally-orange bg-ally-orange/10 shadow-sm'
-                        : 'border-border hover:border-ally-orange/40'
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors',
-                        isSelected ? 'bg-ally-orange text-white' : 'bg-muted text-muted-foreground'
-                      )}
-                    >
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold leading-tight">{format.label}</p>
-                      <p className="text-xs text-muted-foreground leading-tight mt-0.5">{format.description}</p>
-                    </div>
-                    {isSelected && <Check className="w-4 h-4 text-ally-orange flex-shrink-0" />}
-                  </div>
-                );
-              })}
-            </div>
-            {form.formState.errors.deliveryFormat && (
-              <p className="text-sm text-destructive">{form.formState.errors.deliveryFormat.message}</p>
-            )}
-          </div>
-
-          {/* Quantity */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-foreground">
-              Estimated order quantity
-            </Label>
-            <Select
-              value={quantity || ''}
-              onValueChange={(value) => setValue('quantity', value, { shouldValidate: true })}
-            >
-              <SelectTrigger className="w-full bg-white border-border">
-                <SelectValue placeholder="Select quantity range" />
-              </SelectTrigger>
-              <SelectContent className="bg-white border-border z-50">
-                {quantityRanges.map((range) => (
-                  <SelectItem key={range} value={range}>
-                    {range}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Divider */}
-          <div className="border-t border-border" />
-
-          {/* Ingredients Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-foreground">Your Formulation</Label>
-              <button
-                type="button"
-                onClick={clearAllIngredients}
-                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+    <div className="space-y-6">
+      {/* Delivery Format Cards */}
+      <div className="space-y-3">
+        <Label className={cn('text-sm font-medium', errors.deliveryFormat && 'text-destructive')}>
+          Delivery Format <span className="text-destructive">*</span>
+        </Label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {deliveryFormatOptions.map((option) => {
+            const Icon = formatIcons[option.value] || Package;
+            const isSelected = deliveryFormat === option.value;
+            return (
+              <div
+                key={option.value}
+                className={cn(
+                  'border-2 rounded-xl p-4 cursor-pointer transition-all hover:shadow-md active:scale-[0.99]',
+                  isSelected ? 'border-ally-orange bg-ally-orange/10 shadow-md' : 'border-border hover:border-ally-orange/50'
+                )}
+                onClick={() => {
+                  setValue('deliveryFormat', option.value, { shouldValidate: true });
+                  if (option.value !== 'capsules') { setValue('capsuleType', ''); setValue('capsuleTypeOther', ''); }
+                  if (option.value !== 'tablets') { setValue('tabletType', ''); setValue('tabletTypeOther', ''); }
+                }}
               >
-                <Trash2 className="w-4 h-4" />
-                Clear All
-              </button>
-            </div>
-
-            {/* Ingredient headers */}
-            <div className="grid grid-cols-12 gap-2 text-sm text-muted-foreground">
-              <div className="col-span-5">Raw Material</div>
-              <div className="col-span-3">Amount/Serving</div>
-              <div className="col-span-3">Unit</div>
-              <div className="col-span-1"></div>
-            </div>
-
-            {/* Ingredient rows */}
-            {ingredients.map((ingredient) => (
-              <div key={ingredient.id} className="grid grid-cols-12 gap-2 items-center">
-                <div className="col-span-5">
-                  <Input
-                    placeholder="e.g., Vitamin C"
-                    value={ingredient.name}
-                    onChange={(e) => updateIngredient(ingredient.id, 'name', e.target.value)}
-                    className={cn(
-                      'bg-white border-border',
-                      ingredient.name && 'border-accent/50 bg-accent/5'
-                    )}
-                  />
-                </div>
-                <div className="col-span-3">
-                  <Input
-                    placeholder="e.g., 1000"
-                    value={ingredient.amount || ''}
-                    onChange={(e) => updateIngredient(ingredient.id, 'amount', e.target.value)}
-                    className="bg-white border-border"
-                  />
-                </div>
-                <div className="col-span-3">
-                  <Select
-                    value={ingredient.unit}
-                    onValueChange={(value) => updateIngredient(ingredient.id, 'unit', value)}
-                  >
-                    <SelectTrigger className="bg-white border-border">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border-border z-50">
-                      {unitOptions.map((unit) => (
-                        <SelectItem key={unit} value={unit}>
-                          {unit}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-1">
-                  {ingredients.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeIngredient(ingredient.id)}
-                      className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors',
+                    isSelected ? 'bg-ally-orange text-white' : 'bg-muted text-muted-foreground'
+                  )}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm">{option.label}</p>
+                    <p className="text-xs text-muted-foreground">{option.description}</p>
+                  </div>
+                  <CheckCircle2 className={cn(
+                    'h-5 w-5 flex-shrink-0 transition-all',
+                    isSelected ? 'text-ally-orange opacity-100' : 'opacity-0'
+                  )} />
                 </div>
               </div>
-            ))}
-
-            {/* Add Ingredient Button */}
-            <Button
-              type="button"
-              onClick={addIngredient}
-              className="w-full bg-accent/10 hover:bg-accent/20 text-accent-foreground border-0"
-              variant="outline"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Ingredient
-            </Button>
-
-            <p className="text-sm text-muted-foreground">
-              Enter each raw material with its amount per serving. You can add up to 30 ingredients.
-            </p>
-          </div>
-
-          {/* Serving Info */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">Serving Size</Label>
-              <Input
-                placeholder="e.g., 2"
-                value={watch('servingSize') || ''}
-                onChange={(e) => setValue('servingSize', e.target.value)}
-                className="bg-white border-border"
-              />
-              <p className="text-xs text-muted-foreground">Number of capsules per serving</p>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">Servings Per Container</Label>
-              <Input
-                placeholder="e.g., 30"
-                value={watch('servingsPerContainer') || ''}
-                onChange={(e) => setValue('servingsPerContainer', e.target.value)}
-                className="bg-white border-border"
-              />
-              <p className="text-xs text-muted-foreground">Total servings in one bottle</p>
-            </div>
-          </div>
+            );
+          })}
         </div>
-      </FormCard>
+        {errors.deliveryFormat && <p className="text-sm text-destructive">{errors.deliveryFormat.message}</p>}
+      </div>
+
+      {/* Capsule Type */}
+      {deliveryFormat === 'capsules' && (
+        <div className="space-y-2">
+          <Label htmlFor="capsuleType">Capsule Type <span className="text-destructive">*</span></Label>
+          <Select value={capsuleType || ''} onValueChange={(v) => { setValue('capsuleType', v); if (v !== 'other') setValue('capsuleTypeOther', ''); }}>
+            <SelectTrigger><SelectValue placeholder="Select capsule type" /></SelectTrigger>
+            <SelectContent>
+              {capsuleTypeOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {capsuleType === 'other' && (
+            <Input {...register('capsuleTypeOther')} placeholder="Describe your capsule requirements" className="mt-2" />
+          )}
+        </div>
+      )}
+
+      {/* Tablet Type */}
+      {deliveryFormat === 'tablets' && (
+        <div className="space-y-2">
+          <Label htmlFor="tabletType">Tablet Type <span className="text-destructive">*</span></Label>
+          <Select value={tabletType || ''} onValueChange={(v) => { setValue('tabletType', v); if (v !== 'other') setValue('tabletTypeOther', ''); }}>
+            <SelectTrigger><SelectValue placeholder="Select tablet type" /></SelectTrigger>
+            <SelectContent>
+              {tabletTypeOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {tabletType === 'other' && (
+            <Input {...register('tabletTypeOther')} placeholder="Describe your tablet requirements" className="mt-2" />
+          )}
+        </div>
+      )}
+
+      {/* Units Per Box — sachets / stick-packs */}
+      {['sachets', 'stick-packs'].includes(deliveryFormat) && (
+        <div className="space-y-2">
+          <Label>Units Per Box <span className="text-destructive">*</span></Label>
+          <Select value={unitsPerBox || ''} onValueChange={(v) => { setValue('unitsPerBox', v); if (v !== 'other') setValue('unitsPerBoxOther', ''); }}>
+            <SelectTrigger><SelectValue placeholder="Select count" /></SelectTrigger>
+            <SelectContent>
+              {unitsPerBoxOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {unitsPerBox === 'other' && (
+            <Input {...register('unitsPerBoxOther')} placeholder="Specify count" className="mt-2" />
+          )}
+        </div>
+      )}
+
+      {/* Pouch Volume */}
+      {deliveryFormat === 'pouches' && (
+        <div className="space-y-2">
+          <Label>Pouch Volume / Net Weight <span className="text-destructive">*</span></Label>
+          <Select value={pouchVolume || ''} onValueChange={(v) => { setValue('pouchVolume', v); if (v !== 'other') setValue('pouchVolumeOther', ''); }}>
+            <SelectTrigger><SelectValue placeholder="Select volume" /></SelectTrigger>
+            <SelectContent>
+              {pouchVolumeOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {pouchVolume === 'other' && (
+            <Input {...register('pouchVolumeOther')} placeholder="Specify volume" className="mt-2" />
+          )}
+        </div>
+      )}
+
+      {/* Estimated Order Quantity */}
+      <div className="space-y-2 pt-4 border-t border-border">
+        <Label htmlFor="quantity" className="text-sm font-medium">
+          Estimated order quantity <span className="text-destructive">*</span>
+        </Label>
+        <Select value={watch('quantity') || ''} onValueChange={(v) => setValue('quantity', v)}>
+          <SelectTrigger className="h-11"><SelectValue placeholder="Select quantity range" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="under-2000">Less than 2,000 units</SelectItem>
+            <SelectItem value="2000-5000">2,000 – 5,000 units</SelectItem>
+            <SelectItem value="5000-10000">5,000 – 10,000 units</SelectItem>
+            <SelectItem value="10000-25000">10,000 – 25,000 units</SelectItem>
+            <SelectItem value="25000-50000">25,000 – 50,000 units</SelectItem>
+            <SelectItem value="50000-100000">50,000 – 100,000 units</SelectItem>
+            <SelectItem value="100000+">100,000+ units</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 };

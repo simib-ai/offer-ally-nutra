@@ -50,6 +50,13 @@ export default {
         'trust-badge': 'hsl(var(--trust-badge-bg))',
         'section-alt': 'hsl(var(--section-alt-bg))',
         'cta-banner': 'hsl(var(--cta-banner-bg))',
+        ally: {
+          orange: 'hsl(var(--ally-orange))',
+          navy: 'hsl(var(--ally-navy))',
+          'light-navy': 'hsl(var(--ally-light-navy))',
+          dark: 'hsl(var(--ally-dark))',
+          gray: 'hsl(var(--ally-gray))',
+        },
         sidebar: {
           DEFAULT: 'hsl(var(--sidebar-background))',
           foreground: 'hsl(var(--sidebar-foreground))',

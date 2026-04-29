@@ -7,7 +7,7 @@ interface StepIndicatorProps {
 const STEP_LABELS: Record<number, string> = {
   1: "Let's Get Started",
   2: 'Delivery Format',
-  3: 'Review & Submit',
+  3: 'Your Formulation',
   4: 'Packaging & Services',
   5: 'Review & Submit',
 };
