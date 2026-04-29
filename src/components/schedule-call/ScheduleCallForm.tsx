@@ -230,6 +230,7 @@ const ScheduleCallForm = () => {
           notes: message.trim() || undefined,
           client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           is_individual_link: false,
+          lead_source: 'Campaign',
         },
       });
 
