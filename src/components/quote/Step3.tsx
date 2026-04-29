@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QuoteFormData, Ingredient, unitOptions } from '@/types/quoteForm';
 import { IngredientCombobox } from './IngredientCombobox';
+import { ProductAutoFill } from './ProductAutoFill';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Step3Props {
@@ -153,6 +154,23 @@ const Step3 = ({ form }: Step3Props) => {
           className="min-h-[80px]"
         />
       </div>
+
+      {/* Auto-fill from URL or label image */}
+      <ProductAutoFill
+        onParsedIngredients={(parsed) => {
+          const mapped = parsed.map((ing) => ({
+            id: crypto.randomUUID(),
+            name: ing.name,
+            amount: String(ing.amount || ''),
+            unit: ing.unit || 'mg',
+          }));
+          setValue('ingredients', mapped.length > 0 ? mapped : [{ id: crypto.randomUUID(), name: '', amount: '', unit: 'mg' }]);
+        }}
+        onServingInfo={(servingSize, servingsPerContainer) => {
+          if (servingSize) setValue('servingSize', servingSize);
+          if (servingsPerContainer) setValue('servingsPerContainer', String(servingsPerContainer));
+        }}
+      />
     </div>
   );
 };
