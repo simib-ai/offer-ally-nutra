@@ -1,7 +1,7 @@
 import { UseFormReturn } from 'react-hook-form';
-import { Plus, Trash2, Check } from 'lucide-react';
+import { Plus, Trash2, Check, Pill, Square, Zap, Package, ShoppingBag, Star, Droplets, Circle } from 'lucide-react';
 import FormCard from './FormCard';
-import { QuoteFormData, Ingredient, deliveryFormats, unitOptions } from '@/types/quoteForm';
+import { QuoteFormData, Ingredient, deliveryFormats, unitOptions, quantityRanges } from '@/types/quoteForm';
 import {
   Select,
   SelectContent,
@@ -13,19 +13,28 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import type { LucideIcon } from 'lucide-react';
 
 interface Step2Props {
   form: UseFormReturn<QuoteFormData>;
 }
 
+const FORMAT_ICONS: Record<string, LucideIcon> = {
+  capsules: Pill,
+  softgels: Circle,
+  tablets: Square,
+  stick_packs: Zap,
+  sachets: Package,
+  pouches: ShoppingBag,
+  gummies: Star,
+  liquids: Droplets,
+};
+
 const Step2 = ({ form }: Step2Props) => {
   const { watch, setValue } = form;
   const ingredients = watch('ingredients') || [];
   const deliveryFormat = watch('deliveryFormat');
-  const supplementType = watch('supplementType');
   const quantity = watch('quantity');
-
-  const selectedFormat = deliveryFormats.find((f) => f.value === deliveryFormat);
 
   const addIngredient = () => {
     const newIngredient: Ingredient = {
@@ -38,17 +47,11 @@ const Step2 = ({ form }: Step2Props) => {
   };
 
   const removeIngredient = (id: string) => {
-    setValue(
-      'ingredients',
-      ingredients.filter((ing) => ing.id !== id)
-    );
+    setValue('ingredients', ingredients.filter((ing) => ing.id !== id));
   };
 
   const updateIngredient = (id: string, field: keyof Ingredient, value: string) => {
-    setValue(
-      'ingredients',
-      ingredients.map((ing) => (ing.id === id ? { ...ing, [field]: value } : ing))
-    );
+    setValue('ingredients', ingredients.map((ing) => (ing.id === id ? { ...ing, [field]: value } : ing)));
   };
 
   const clearAllIngredients = () => {
@@ -63,52 +66,69 @@ const Step2 = ({ form }: Step2Props) => {
           <p className="text-muted-foreground">Type and formulation details</p>
         </div>
 
-        {/* Summary from Step 1 */}
-        <div className="bg-secondary/50 rounded-lg p-4 mb-6">
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">{supplementType || 'Not selected'}</span>
-            {quantity && (
-              <>
-                {' '}•{' '}
-                <span className="font-medium text-foreground">{quantity}</span>
-              </>
-            )}
-          </p>
-        </div>
-
         <div className="space-y-6">
-          {/* Delivery Format */}
+          {/* Delivery Format — visual card grid */}
           <div className="space-y-2">
             <Label className="text-sm font-medium text-foreground">
               Delivery Format <span className="text-destructive">*</span>
             </Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {deliveryFormats.map((format) => {
+                const isSelected = deliveryFormat === format.value;
+                const Icon = FORMAT_ICONS[format.value] ?? Package;
+                return (
+                  <div
+                    key={format.value}
+                    onClick={() => setValue('deliveryFormat', format.value, { shouldValidate: true })}
+                    className={cn(
+                      'flex items-center gap-3 border rounded-xl p-3 cursor-pointer transition-all hover:shadow-sm active:scale-[0.99]',
+                      isSelected
+                        ? 'border-ally-orange bg-ally-orange/10 shadow-sm'
+                        : 'border-border hover:border-ally-orange/40'
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors',
+                        isSelected ? 'bg-ally-orange text-white' : 'bg-muted text-muted-foreground'
+                      )}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold leading-tight">{format.label}</p>
+                      <p className="text-xs text-muted-foreground leading-tight mt-0.5">{format.description}</p>
+                    </div>
+                    {isSelected && <Check className="w-4 h-4 text-ally-orange flex-shrink-0" />}
+                  </div>
+                );
+              })}
+            </div>
+            {form.formState.errors.deliveryFormat && (
+              <p className="text-sm text-destructive">{form.formState.errors.deliveryFormat.message}</p>
+            )}
+          </div>
+
+          {/* Quantity */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-foreground">
+              Estimated order quantity
+            </Label>
             <Select
-              value={deliveryFormat}
-              onValueChange={(value) => setValue('deliveryFormat', value, { shouldValidate: true })}
+              value={quantity || ''}
+              onValueChange={(value) => setValue('quantity', value, { shouldValidate: true })}
             >
-              <SelectTrigger className={cn(
-                'w-full bg-white border-border',
-                deliveryFormat && 'border-accent'
-              )}>
-                <div className="flex items-center justify-between w-full">
-                  <SelectValue placeholder="Select delivery format" />
-                  {deliveryFormat && <Check className="w-4 h-4 text-accent ml-2" />}
-                </div>
+              <SelectTrigger className="w-full bg-white border-border">
+                <SelectValue placeholder="Select quantity range" />
               </SelectTrigger>
               <SelectContent className="bg-white border-border z-50">
-                {deliveryFormats.map((format) => (
-                  <SelectItem key={format.value} value={format.value}>
-                    {format.label}
+                {quantityRanges.map((range) => (
+                  <SelectItem key={range} value={range}>
+                    {range}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {selectedFormat && (
-              <p className="text-sm text-accent">{selectedFormat.description}</p>
-            )}
-            {form.formState.errors.deliveryFormat && (
-              <p className="text-sm text-destructive">{form.formState.errors.deliveryFormat.message}</p>
-            )}
           </div>
 
           {/* Divider */}
@@ -137,7 +157,7 @@ const Step2 = ({ form }: Step2Props) => {
             </div>
 
             {/* Ingredient rows */}
-            {ingredients.map((ingredient, index) => (
+            {ingredients.map((ingredient) => (
               <div key={ingredient.id} className="grid grid-cols-12 gap-2 items-center">
                 <div className="col-span-5">
                   <Input

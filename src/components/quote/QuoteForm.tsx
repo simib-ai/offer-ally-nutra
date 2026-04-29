@@ -11,7 +11,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowRight, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Loader2, CheckCircle, CalendarDays, Phone, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import StepIndicator from './StepIndicator';
 import Step1 from './Step1';
@@ -38,6 +38,7 @@ const QuoteForm = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [showContactOptions, setShowContactOptions] = useState(false);
   const [honeypot, setHoneypot] = useState('');
   // [CRITICAL_LEAD_FLOW][DEBUG_UI] Temporary debug panel state — REMOVE after diagnosis
   const [debugError, setDebugError] = useState<Record<string, unknown> | null>(null);
@@ -47,9 +48,11 @@ const QuoteForm = () => {
   const form = useForm<QuoteFormData>({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: {
+      formulationStatus: undefined,
+      email: '',
+      phone: '',
       supplementType: '',
       quantity: '',
-      formulationStatus: undefined,
       deliveryFormat: '',
       ingredients: [{ id: crypto.randomUUID(), name: '', amount: '', unit: 'mg' }],
       servingSize: '',
@@ -63,8 +66,6 @@ const QuoteForm = () => {
       graphicDesignBy: '',
       additionalComments: '',
       fullName: '',
-      email: '',
-      phone: '',
       company: '',
       marketingConsent: false,
       emailConsent: false,
@@ -78,13 +79,15 @@ const QuoteForm = () => {
     try {
       if (currentStep === 1) {
         await step1Schema.parseAsync({
-          supplementType: values.supplementType,
-          quantity: values.quantity,
           formulationStatus: values.formulationStatus,
+          email: values.email,
+          phone: values.phone,
         });
         return true;
       } else if (currentStep === 2) {
         await step2Schema.parseAsync({
+          supplementType: values.supplementType,
+          quantity: values.quantity,
           deliveryFormat: values.deliveryFormat,
           ingredients: values.ingredients,
           servingSize: values.servingSize,
@@ -102,8 +105,6 @@ const QuoteForm = () => {
           graphicDesignBy: values.graphicDesignBy,
           additionalComments: values.additionalComments,
           fullName: values.fullName,
-          email: values.email,
-          phone: values.phone,
           company: values.company,
           marketingConsent: values.marketingConsent,
           emailConsent: values.emailConsent,
@@ -112,11 +113,11 @@ const QuoteForm = () => {
       }
     } catch {
       if (currentStep === 1) {
-        form.trigger(['supplementType', 'quantity', 'formulationStatus']);
+        form.trigger(['formulationStatus', 'email', 'phone']);
       } else if (currentStep === 2) {
         form.trigger(['deliveryFormat', 'ingredients']);
       } else if (currentStep === 3) {
-        form.trigger(['fullName', 'email']);
+        form.trigger(['fullName']);
       }
       return false;
     }
@@ -125,16 +126,77 @@ const QuoteForm = () => {
 
   const handleNext = async () => {
     const isValid = await validateCurrentStep();
-    if (isValid && currentStep < 3) {
+    if (!isValid) return;
+
+    // After step 1, check formulationStatus
+    if (currentStep === 1) {
+      const formulationStatus = form.getValues('formulationStatus');
+      if (formulationStatus === 'general_idea') {
+        setShowContactOptions(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+    }
+
+    if (currentStep < 3) {
       setCurrentStep((prev) => prev + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const handlePrevious = () => {
+    if (showContactOptions) {
+      setShowContactOptions(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (currentStep > 1) {
       setCurrentStep((prev) => prev - 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleSendMessage = async () => {
+    setIsSubmitting(true);
+    try {
+      let recaptchaToken: string;
+      try {
+        recaptchaToken = await executeRecaptcha();
+      } catch (recaptchaError) {
+        console.error('[CRITICAL_LEAD_FLOW] reCAPTCHA execution failed:', recaptchaError);
+        toast.error('Security verification failed. Please refresh the page and try again.');
+        return;
+      }
+
+      // For general_idea quick-submit: use email prefix as fullName if not set
+      const values = form.getValues();
+      if (!values.fullName || values.fullName.trim() === '') {
+        const emailPrefix = values.email.split('@')[0] || 'Customer';
+        form.setValue('fullName', emailPrefix);
+      }
+
+      const result = await submitLead({
+        formData: form.getValues(),
+        recaptchaToken,
+        honeypot,
+      });
+
+      if (result.success) {
+        setIsSuccess(true);
+        form.reset();
+        return;
+      }
+
+      const err = result.error!;
+      const parts = [err.message];
+      if (err.details) parts.push(String(err.details).slice(0, 200));
+      toast.error(parts.join(' — '), { duration: 15000 });
+      setDebugError(err as unknown as Record<string, unknown>);
+    } catch (unexpectedError) {
+      console.error('[CRITICAL_LEAD_FLOW_FAILURE] Unexpected error in handleSendMessage:', unexpectedError);
+      toast.error('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -235,6 +297,7 @@ const QuoteForm = () => {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     setIsSuccess(false);
     setCurrentStep(1);
+    setShowContactOptions(false);
     setIsSubmitting(false);
     form.reset();
     setHoneypot('');
@@ -264,6 +327,98 @@ const QuoteForm = () => {
               className="h-10"
             />
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Contact options view for general_idea path
+  if (showContactOptions) {
+    return (
+      <div className="w-full max-w-2xl mx-auto">
+        <div className="mb-6">
+          <StepIndicator currentStep={2} totalSteps={2} label="How Would You Like to Connect?" />
+        </div>
+
+        <div className="mb-8 space-y-3">
+
+          {/* Submit a Quote Request — continues to full form */}
+          <div
+            className="border border-border rounded-xl p-4 cursor-pointer transition-all hover:shadow-md hover:border-primary/40 active:scale-[0.99]"
+            onClick={() => {
+              form.setValue('formulationStatus', 'complete');
+              setShowContactOptions(false);
+              setCurrentStep(2);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-sm">Submit a Quote Request</p>
+                <p className="text-xs text-muted-foreground">Tell us about your concept in a quick form</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-primary flex-shrink-0" />
+            </div>
+          </div>
+
+          {/* Schedule a Call */}
+          <div
+            className="border border-border rounded-xl p-4 cursor-pointer transition-all hover:shadow-md hover:border-primary/40 active:scale-[0.99]"
+            onClick={() => { window.location.href = '/schedule-call'; }}
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-sm">Schedule a Call</p>
+                <p className="text-xs text-muted-foreground">Book a time with our team to shape your idea</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-primary flex-shrink-0" />
+            </div>
+          </div>
+
+          {/* Call Us Now */}
+          <a
+            href="tel:+18887205888"
+            className="block border border-ally-orange/30 bg-ally-orange/5 rounded-xl p-4 cursor-pointer transition-all hover:shadow-md hover:border-ally-orange/60 active:scale-[0.99]"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-ally-orange/10 flex items-center justify-center flex-shrink-0">
+                <Phone className="h-4 w-4 text-ally-orange" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-sm">Call Us Now</p>
+                <p className="text-xs text-muted-foreground">Speak with a specialist at (888) 720-5888</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-ally-orange flex-shrink-0" />
+            </div>
+          </a>
+        </div>
+
+        {/* [CRITICAL_LEAD_FLOW][DEBUG_UI] Temporary debug panel — REMOVE after diagnosis */}
+        {debugError && (
+          <div className="mt-4 p-4 bg-red-50 border border-red-300 rounded text-xs font-mono text-red-900 overflow-auto max-h-64">
+            <div className="font-bold mb-1">[DEBUG_UI] Edge Function Error Details:</div>
+            <pre className="whitespace-pre-wrap break-all">{JSON.stringify(debugError, null, 2)}</pre>
+            <button type="button" onClick={() => setDebugError(null)} className="mt-2 text-red-600 underline text-xs">Dismiss</button>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handlePrevious}
+            className="px-6 py-3 border-border"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Previous
+          </Button>
+          <div />
         </div>
       </div>
     );
