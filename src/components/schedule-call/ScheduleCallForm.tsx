@@ -1,181 +1,283 @@
-import { useCallback, useRef, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { format, startOfToday } from 'date-fns';
-import { CheckCircle, ChevronRight, Loader2, Paperclip } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { CheckCircle, Clock, CalendarDays, User, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 
-import FormCard from '@/components/quote/FormCard';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useAttribution } from '@/hooks/useAttribution';
-import { buildScheduleCallQuotePayload } from '@/lib/buildScheduleCallQuotePayload';
-import { submitLead } from '@/lib/submitLead';
-import { cn } from '@/lib/utils';
-import {
-  scheduleCallFormSchema,
-  type ScheduleCallFormValues,
-} from '@/types/scheduleCallForm';
-import { quantityRanges } from '@/types/quoteForm';
+import { supabase } from '@/integrations/supabase/client';
 import allyNutraLogo from '@/assets/ally-nutra-logo.png';
 
-const RECAPTCHA_SITE_KEY = '6LciZlksAAAAAEyOAQFiSUe1Z5pEcUJ4BkFndC5K';
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-
-const TIME_SLOTS_ET = [
-  '9:00 AM – 9:30 AM ET',
-  '9:30 AM – 10:00 AM ET',
-  '10:00 AM – 10:30 AM ET',
-  '10:30 AM – 11:00 AM ET',
-  '11:00 AM – 11:30 AM ET',
-  '11:30 AM – 12:00 PM ET',
-  '1:00 PM – 1:30 PM ET',
-  '1:30 PM – 2:00 PM ET',
-  '2:00 PM – 2:30 PM ET',
-  '2:30 PM – 3:00 PM ET',
-  '3:00 PM – 3:30 PM ET',
-  '3:30 PM – 4:00 PM ET',
-  '4:00 PM – 4:30 PM ET',
-  '4:30 PM – 5:00 PM ET',
-];
-
-interface GrecaptchaInstance {
-  ready: (callback: () => void) => void;
-  execute: (siteKey: string, options: { action: string }) => Promise<string>;
+interface AvailableSlot {
+  id: string;
+  slot_date: string;
+  start_time: string;
+  end_time: string;
+  admin_name: string;
 }
 
-const getGrecaptcha = (): GrecaptchaInstance | null =>
-  (window as unknown as { grecaptcha?: GrecaptchaInstance }).grecaptcha || null;
+// ET date helpers (inlined to avoid import dependency)
+const getETTodayStr = () =>
+  new Date().toLocaleDateString('sv-SE', { timeZone: 'America/New_York' });
 
-const StepIndicator = ({ step, current }: { step: number; current: number }) => {
-  const done = current > step;
-  const active = current === step;
-  return (
-    <div
-      className={cn(
-        'w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold border-2 transition-colors',
-        done && 'bg-primary border-primary text-primary-foreground',
-        active && 'bg-primary border-primary text-primary-foreground',
-        !done && !active && 'bg-white border-border text-muted-foreground'
-      )}
-    >
-      {done ? <CheckCircle className="w-4 h-4" /> : step}
-    </div>
+const getETFutureDateStr = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toLocaleDateString('sv-SE', { timeZone: 'America/New_York' });
+};
+
+const isSlotBookable = (slotDate: string, startTime: string) => {
+  const nowET = new Date(
+    new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
   );
+  const [h, m] = startTime.split(':').map(Number);
+  const [y, mo, d] = slotDate.split('-').map(Number);
+  const slotET = new Date(y, mo - 1, d, h, m);
+  return slotET.getTime() - nowET.getTime() > 60 * 60 * 1000; // 1-hour buffer
+};
+
+const formatTime = (time: string) => {
+  const [h, m] = time.split(':');
+  const hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const h12 = hour % 12 || 12;
+  return `${h12}:${m} ${ampm}`;
+};
+
+const getEndTime30 = (startTime: string) => {
+  const [h, m] = startTime.split(':').map(Number);
+  const totalMin = h * 60 + m + 30;
+  const endH = Math.floor(totalMin / 60) % 24;
+  const endM = totalMin % 60;
+  return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
 };
 
 const ScheduleCallForm = () => {
   const [step, setStep] = useState(1);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [slots, setSlots] = useState<AvailableSlot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [honeypot, setHoneypot] = useState('');
-  const [files, setFiles] = useState<File[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const dropRef = useRef<HTMLDivElement>(null);
+  const [priorityMap, setPriorityMap] = useState<Record<string, number>>({});
 
-  useAttribution();
+  // Contact form state
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [company, setCompany] = useState('');
+  const [message, setMessage] = useState('');
 
-  const form = useForm<ScheduleCallFormValues>({
-    resolver: zodResolver(scheduleCallFormSchema),
-    defaultValues: {
-      fullName: '',
-      email: '',
-      phone: '',
-      company: '',
-      quantityRange: '',
-      message: '',
-      timeSlot: '',
-    },
-    mode: 'onChange',
-  });
+  // Fetch all available (unbooked) slots
+  useEffect(() => {
+    let cancelled = false;
 
-  const meetingDate = form.watch('meetingDate');
-  const timeSlot = form.watch('timeSlot');
+    const fetchSlots = async () => {
+      setLoading(true);
 
-  const addFiles = useCallback((list: FileList | File[]) => {
-    setFiles((prev) => {
-      const next = [...prev];
-      for (const file of Array.from(list)) {
-        if (file.size > MAX_ATTACHMENT_BYTES) {
-          toast.error(`${file.name} exceeds 10MB and was skipped.`);
-          continue;
-        }
-        next.push(file);
+      // 1. Fetch scheduling pool via secure RPC
+      const { data: poolData, error: poolError } = await supabase
+        .rpc('get_public_scheduling_pool');
+
+      if (cancelled) return;
+
+      if (poolError) {
+        console.error('Failed to fetch scheduling pool:', poolError);
+        toast.error('Failed to load availability');
+        setLoading(false);
+        return;
       }
-      return next;
-    });
+
+      const map: Record<string, number> = {};
+      const poolNames: string[] = [];
+      if (poolData) {
+        for (const p of poolData) {
+          if (!p.admin_name) continue;
+          const key = p.admin_name.toLowerCase();
+          const existingPriority = map[key];
+          if (existingPriority === undefined || p.scheduling_priority < existingPriority) {
+            map[key] = p.scheduling_priority;
+          }
+          if (!poolNames.includes(p.admin_name)) {
+            poolNames.push(p.admin_name);
+          }
+        }
+      }
+      setPriorityMap(map);
+
+      if (poolNames.length === 0) {
+        if (!cancelled) { setSlots([]); setLoading(false); }
+        return;
+      }
+
+      // 2. Fetch slots for pool members
+      const todayStr = getETTodayStr();
+      const maxDateStr = getETFutureDateStr(14);
+
+      const { data: slotsData, error: slotsError } = await supabase
+        .from('availability_slots')
+        .select('id, slot_date, start_time, end_time, admin_name')
+        .eq('is_booked', false)
+        .gte('slot_date', todayStr)
+        .lte('slot_date', maxDateStr)
+        .in('admin_name', poolNames)
+        .order('slot_date', { ascending: true })
+        .order('start_time', { ascending: true });
+
+      if (cancelled) return;
+
+      if (slotsError) {
+        console.error('Failed to fetch slots:', slotsError);
+        toast.error('Failed to load availability');
+        setLoading(false);
+        return;
+      }
+
+      const rawData = (slotsData || []) as AvailableSlot[];
+      const filtered = rawData.filter(slot => isSlotBookable(slot.slot_date, slot.start_time));
+      setSlots(filtered);
+      setLoading(false);
+    };
+
+    fetchSlots();
+    return () => { cancelled = true; };
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
-  }, [addFiles]);
+  // Helper: compute bookable slots for a given date string
+  const getBookableSlotsForDate = (dateStr: string) => {
+    const dateSlots = slots.filter(s => s.slot_date === dateStr);
+    const seen = new Map<string, AvailableSlot>();
 
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    const imageFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].kind === 'file') {
-        const f = items[i].getAsFile();
-        if (f) imageFiles.push(f);
+    const candidates: AvailableSlot[] = [];
+    for (const slot of dateSlots) {
+      if (!isSlotBookable(dateStr, slot.start_time)) continue;
+      const nextStart = slot.end_time;
+      const hasNext = dateSlots.some(
+        s => s.admin_name === slot.admin_name && s.start_time === nextStart
+      );
+      if (hasNext) {
+        candidates.push(slot);
       }
     }
-    if (imageFiles.length) { e.preventDefault(); addFiles(imageFiles); }
-  }, [addFiles]);
 
-  const executeRecaptcha = (): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const g = getGrecaptcha();
-      if (!g) { reject(new Error('reCAPTCHA not loaded. Please refresh and try again.')); return; }
-      g.ready(() => g.execute(RECAPTCHA_SITE_KEY, { action: 'quote_submit' }).then(resolve).catch(reject));
-    });
-
-  const handleSubmit = form.handleSubmit(async (values) => {
-    setIsSubmitting(true);
-    try {
-      let recaptchaToken: string;
-      try {
-        recaptchaToken = await executeRecaptcha();
-      } catch {
-        toast.error('Security verification failed. Please refresh the page and try again.');
-        return;
+    // Deduplicate by start_time, keeping highest-priority specialist (lowest number)
+    for (const slot of candidates) {
+      const existing = seen.get(slot.start_time);
+      if (!existing) {
+        seen.set(slot.start_time, slot);
+      } else {
+        const existingPriority = priorityMap[existing.admin_name.toLowerCase()] ?? 5;
+        const newPriority = priorityMap[slot.admin_name.toLowerCase()] ?? 5;
+        if (newPriority < existingPriority) {
+          seen.set(slot.start_time, slot);
+        }
       }
+    }
 
-      const result = await submitLead({
-        formData: buildScheduleCallQuotePayload(values, files.map((f) => f.name)),
-        recaptchaToken,
-        honeypot,
+    return Array.from(seen.values());
+  };
+
+  // Dates that have bookable slots
+  const availableDates = useMemo(() => {
+    const dateSet = new Set(slots.map(s => s.slot_date));
+    return Array.from(dateSet)
+      .filter(d => getBookableSlotsForDate(d).length > 0)
+      .map(d => new Date(d + 'T00:00:00'));
+  }, [slots, priorityMap]);
+
+  const availableDateStrs = useMemo(() => {
+    return new Set(availableDates.map(d => format(d, 'yyyy-MM-dd')));
+  }, [availableDates]);
+
+  const slotsForDate = useMemo(() => {
+    if (!selectedDate) return [];
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    return getBookableSlotsForDate(dateStr);
+  }, [slots, selectedDate, priorityMap]);
+
+  const handleDateSelect = (date: Date | undefined) => {
+    setSelectedDate(date);
+    setSelectedSlot(null);
+    if (date) setStep(2);
+  };
+
+  const handleSlotSelect = (slot: AvailableSlot) => {
+    setSelectedSlot(slot);
+    setStep(3);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSlot || !fullName.trim() || !email.trim() || !phone.trim()) {
+      toast.error('Please fill in all required fields.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('book-appointment', {
+        body: {
+          slot_id: selectedSlot.id,
+          full_name: fullName,
+          email,
+          phone,
+          company_name: company || undefined,
+          notes: message.trim() || undefined,
+          client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          is_individual_link: false,
+        },
       });
 
-      if (result.success) {
-        setIsSuccess(true);
-        form.reset();
-        setFiles([]);
-        return;
+      let result = data;
+      if (error) {
+        try {
+          const ctx = (error as unknown as { context?: { json?: () => Promise<unknown>; text?: () => Promise<string> } }).context;
+          if (ctx?.json) {
+            result = await ctx.json();
+          } else if (ctx?.text) {
+            const text = await ctx.text();
+            try { result = JSON.parse(text); } catch { result = { error: text }; }
+          }
+        } catch {
+          // fall through
+        }
+        if (!result?.error) throw error;
       }
 
-      const err = result.error!;
-      const parts = [err.message];
-      if (err.details) parts.push(String(err.details).slice(0, 200));
-      toast.error(parts.join(' — '), { duration: 15000 });
-    } catch {
-      toast.error('An unexpected error occurred. Please try again.');
+      if (result?.error) {
+        toast.error(result.error);
+        if (result.error.includes('no longer available')) {
+          setStep(2);
+          setSelectedSlot(null);
+          // Refresh slots
+          const refreshToday = getETTodayStr();
+          const refreshMax = getETFutureDateStr(14);
+          const { data: refreshed } = await supabase
+            .from('availability_slots')
+            .select('id, slot_date, start_time, end_time, admin_name')
+            .eq('is_booked', false)
+            .gte('slot_date', refreshToday)
+            .lte('slot_date', refreshMax)
+            .order('slot_date', { ascending: true })
+            .order('start_time', { ascending: true })
+            .limit(5000);
+          setSlots(((refreshed || []) as AvailableSlot[]).filter(s => isSlotBookable(s.slot_date, s.start_time)));
+        }
+      } else {
+        setIsSuccess(true);
+      }
+    } catch (err) {
+      console.error('Booking error:', err);
+      toast.error('Something went wrong. Please try again.');
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
-  });
+  };
 
   if (isSuccess) {
     return (
@@ -185,11 +287,22 @@ const ScheduleCallForm = () => {
             <CheckCircle className="w-10 h-10 text-accent" />
           </div>
           <h2 className="text-2xl font-bold text-primary mb-3">You're Booked!</h2>
-          <p className="text-muted-foreground mb-2">Your call request has been submitted successfully.</p>
-          <p className="text-sm text-muted-foreground mb-6">We'll confirm your slot shortly.</p>
+          <p className="text-muted-foreground mb-2">Your discovery call has been scheduled successfully.</p>
+          <p className="text-sm text-muted-foreground mb-6">Check your email for confirmation details.</p>
           <button
             type="button"
-            onClick={() => { setIsSuccess(false); form.reset(); setFiles([]); setStep(1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            onClick={() => {
+              setIsSuccess(false);
+              setStep(1);
+              setSelectedDate(undefined);
+              setSelectedSlot(null);
+              setFullName('');
+              setEmail('');
+              setPhone('');
+              setCompany('');
+              setMessage('');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
             className="mx-auto block cursor-pointer bg-transparent border-none p-0"
           >
             <img src={allyNutraLogo} alt="Ally Nutra" className="h-10" />
@@ -202,209 +315,186 @@ const ScheduleCallForm = () => {
   return (
     <div className="w-full max-w-xl mx-auto">
       {/* Step indicators */}
-      <div className="flex items-center justify-center gap-3 mb-8">
-        {[1, 2, 3].map((s, i) => (
-          <div key={s} className="flex items-center gap-3">
-            <StepIndicator step={s} current={step} />
-            {i < 2 && <div className={cn('w-12 h-0.5', step > s ? 'bg-primary' : 'bg-border')} />}
+      <div className="flex items-center justify-center gap-2 mb-8">
+        {[1, 2, 3].map(s => (
+          <div key={s} className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${s === step ? 'bg-primary text-primary-foreground' : s < step ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
+              {s < step ? '✓' : s}
+            </div>
+            {s < 3 && <div className={`w-12 h-0.5 ${s < step ? 'bg-primary/40' : 'bg-muted'}`} />}
           </div>
         ))}
       </div>
 
-      {/* Step 1 — Select a Date */}
+      {/* Back button */}
+      {step > 1 && (
+        <Button
+          variant="ghost"
+          onClick={() => setStep(step - 1)}
+          className="mb-4 -ml-2"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back
+        </Button>
+      )}
+
+      {/* Step 1: Pick a Date */}
       {step === 1 && (
-        <FormCard>
-          <h2 className="text-xl font-bold text-primary mb-1">Select a Date</h2>
-          <p className="text-sm text-muted-foreground mb-5">Choose your preferred day for the call.</p>
-          <Controller
-            control={form.control}
-            name="meetingDate"
-            render={({ field }) => (
-              <div className="rounded-md border border-border p-3 bg-white">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <CalendarDays className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold">Select a Date</h2>
+            </div>
+            {loading ? (
+              <p className="text-muted-foreground text-center py-12">Loading availability…</p>
+            ) : availableDates.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground mb-2">No availability at this time.</p>
+                <p className="text-sm text-muted-foreground">Please check back soon or contact us directly.</p>
+              </div>
+            ) : (
+              <div className="w-full">
                 <Calendar
                   mode="single"
-                  selected={field.value}
-                  onSelect={field.onChange}
-                  disabled={(date) => date < startOfToday()}
-                  initialFocus
-                  className="mx-auto"
+                  selected={selectedDate}
+                  onSelect={handleDateSelect}
+                  disabled={(date) => {
+                    const dateStr = format(date, 'yyyy-MM-dd');
+                    return !availableDateStrs.has(dateStr);
+                  }}
+                  fromDate={new Date()}
+                  toDate={(() => { const d = new Date(); d.setDate(d.getDate() + 14); return d; })()}
+                  className="rounded-md w-full"
+                  classNames={{
+                    months: 'flex flex-col w-full',
+                    month: 'space-y-4 w-full',
+                    caption: 'flex justify-center pt-1 relative items-center',
+                    caption_label: 'text-sm font-medium',
+                    nav: 'space-x-1 flex items-center',
+                    nav_button: 'h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 inline-flex items-center justify-center rounded-md border border-input',
+                    nav_button_previous: 'absolute left-1',
+                    nav_button_next: 'absolute right-1',
+                    table: 'w-full border-collapse',
+                    head_row: 'flex w-full',
+                    head_cell: 'text-muted-foreground rounded-md flex-1 font-normal text-sm text-center',
+                    row: 'flex w-full mt-2',
+                    cell: 'flex-1 text-center text-sm p-0 relative focus-within:relative focus-within:z-20 flex items-center justify-center',
+                    day: 'h-9 w-9 p-0 font-normal rounded-full inline-flex items-center justify-center aria-selected:opacity-100 hover:bg-accent transition-colors',
+                    day_today: '!bg-ally-navy !text-white !rounded-full',
+                    day_selected: '!bg-ally-orange !text-white !rounded-full',
+                    day_outside: 'text-muted-foreground opacity-50',
+                    day_disabled: 'text-muted-foreground opacity-50',
+                    day_hidden: 'invisible',
+                  }}
                 />
               </div>
             )}
-          />
-          {form.formState.errors.meetingDate && (
-            <p className="text-sm text-destructive mt-2">{form.formState.errors.meetingDate.message}</p>
-          )}
-          <Button
-            className="w-full mt-6 py-6 text-base font-semibold"
-            disabled={!meetingDate}
-            onClick={() => setStep(2)}
-          >
-            Continue <ChevronRight className="w-4 h-4 ml-1" />
-          </Button>
-        </FormCard>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Step 2 — Select a Time */}
-      {step === 2 && (
-        <FormCard>
-          <div className="mb-5">
-            <p className="text-sm text-muted-foreground font-medium">
-              {meetingDate ? format(meetingDate, 'EEEE, MMMM d, yyyy') : ''}
-            </p>
-            <h2 className="text-xl font-bold text-primary mt-0.5">Select a Time</h2>
-            <p className="text-sm text-muted-foreground mt-1">All times are Eastern Time (ET).</p>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {TIME_SLOTS_ET.map((slot) => (
-              <button
-                key={slot}
-                type="button"
-                onClick={() => form.setValue('timeSlot', slot, { shouldValidate: true })}
-                className={cn(
-                  'rounded-lg border px-3 py-2.5 text-sm font-medium text-left transition-colors',
-                  timeSlot === slot
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-white hover:border-primary/40 text-foreground'
-                )}
-              >
-                {slot}
-              </button>
-            ))}
-          </div>
-          {form.formState.errors.timeSlot && (
-            <p className="text-sm text-destructive mt-2">{form.formState.errors.timeSlot.message}</p>
-          )}
-          <div className="flex gap-3 mt-6">
-            <Button variant="outline" className="flex-1 py-6" onClick={() => setStep(1)}>
-              Back
-            </Button>
-            <Button
-              className="flex-1 py-6 text-base font-semibold"
-              disabled={!timeSlot}
-              onClick={() => setStep(3)}
-            >
-              Continue <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
-          </div>
-        </FormCard>
+      {/* Step 2: Pick a Time */}
+      {step === 2 && selectedDate && (
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Clock className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold">Pick a Time</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">{format(selectedDate, 'EEEE, MMMM d, yyyy')}</p>
+            {slotsForDate.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No slots available for this date.</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {slotsForDate.map(slot => (
+                  <Button
+                    key={slot.id}
+                    variant={selectedSlot?.id === slot.id ? 'default' : 'outline'}
+                    className="h-auto py-3"
+                    onClick={() => handleSlotSelect(slot)}
+                  >
+                    <span className="font-semibold">{formatTime(slot.start_time)}</span>
+                  </Button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      {/* Step 3 — Your Information */}
-      {step === 3 && (
-        <FormCard>
-          <div className="mb-5">
-            <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm mb-5">
-              <p className="font-semibold text-foreground">{meetingDate ? format(meetingDate, 'EEEE, MMMM d, yyyy') : ''}</p>
-              <p className="text-muted-foreground mt-0.5">{timeSlot}</p>
+      {/* Step 3: Contact Info */}
+      {step === 3 && selectedSlot && (
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <User className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold">Your Information</h2>
             </div>
-            <h2 className="text-xl font-bold text-primary">Your Information</h2>
-            <p className="text-sm text-muted-foreground mt-1">Tell us how to reach you.</p>
-          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="sc-fullName" className="text-sm font-medium">
-                  Full Name <span className="text-destructive">*</span>
-                </Label>
-                <Input id="sc-fullName" placeholder="Jane Doe" className="bg-white border-border" {...form.register('fullName')} />
-                {form.formState.errors.fullName && <p className="text-sm text-destructive">{form.formState.errors.fullName.message}</p>}
+            <div className="bg-muted/50 rounded-lg p-3 mb-6 text-sm">
+              <p className="font-medium">{selectedDate && format(selectedDate, 'EEEE, MMMM d, yyyy')}</p>
+              <p className="text-muted-foreground">{formatTime(selectedSlot.start_time)} – {formatTime(getEndTime30(selectedSlot.start_time))} ET</p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="fullName">Full Name <span className="text-destructive">*</span></Label>
+                <Input
+                  id="fullName"
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  required
+                  placeholder="Jane Doe"
+                />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="sc-email" className="text-sm font-medium">
-                  Email <span className="text-destructive">*</span>
-                </Label>
-                <Input id="sc-email" type="email" placeholder="jane@company.com" className="bg-white border-border" {...form.register('email')} />
-                {form.formState.errors.email && <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>}
+              <div>
+                <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  placeholder="jane@company.com"
+                />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="sc-phone" className="text-sm font-medium">
-                  Phone <span className="text-destructive">*</span>
-                </Label>
-                <Input id="sc-phone" type="tel" placeholder="(555) 123-4567" className="bg-white border-border" {...form.register('phone')} />
-                {form.formState.errors.phone && <p className="text-sm text-destructive">{form.formState.errors.phone.message}</p>}
+              <div>
+                <Label htmlFor="phone">Phone <span className="text-destructive">*</span></Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  required
+                  placeholder="(555) 123-4567"
+                />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="sc-company" className="text-sm font-medium">Company</Label>
-                <Input id="sc-company" placeholder="Your company" className="bg-white border-border" {...form.register('company')} />
+              <div>
+                <Label htmlFor="company">Company Name</Label>
+                <Input
+                  id="company"
+                  value={company}
+                  onChange={e => setCompany(e.target.value)}
+                  placeholder="Your company"
+                />
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">
-                How many units are you looking to order? <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={form.watch('quantityRange')}
-                onValueChange={(v) => form.setValue('quantityRange', v, { shouldValidate: true })}
-              >
-                <SelectTrigger className="w-full bg-white border-border">
-                  <SelectValue placeholder="Select quantity range" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-border z-50">
-                  {quantityRanges.map((range) => (
-                    <SelectItem key={range} value={range}>{range}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.quantityRange && <p className="text-sm text-destructive">{form.formState.errors.quantityRange.message}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="sc-message" className="text-sm font-medium">Message</Label>
-              <Textarea
-                id="sc-message"
-                placeholder="What would you like to discuss? e.g. product formulation, pricing, timelines..."
-                className="bg-white border-border min-h-[100px] resize-y"
-                {...form.register('message')}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Attachments</Label>
-              <div
-                ref={dropRef}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
-                onClick={() => fileInputRef.current?.click()}
-                onDrop={handleDrop}
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onPaste={handlePaste}
-                className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-6 text-center cursor-pointer transition-colors hover:bg-muted/35 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              >
-                <input ref={fileInputRef} type="file" className="hidden" multiple accept=".pdf,image/*,.doc,.docx,.xls,.xlsx"
-                  onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
-                <Paperclip className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm font-medium text-foreground">Click to browse or paste image</p>
-                <p className="text-xs text-muted-foreground mt-1">PDF, images, Word, Excel — max 10MB per file</p>
-                {files.length > 0 && (
-                  <ul className="mt-2 text-left text-xs text-muted-foreground max-h-20 overflow-y-auto">
-                    {files.map((f) => <li key={f.name + f.size} className="truncate">{f.name}</li>)}
-                  </ul>
-                )}
+              <div>
+                <Label htmlFor="message">Message</Label>
+                <Textarea
+                  id="message"
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                  placeholder="What would you like to discuss on the call? e.g. product formulation, pricing, timelines…"
+                  className="min-h-[100px]"
+                />
               </div>
-            </div>
-
-            <div aria-hidden="true" className="absolute -left-[9999px] opacity-0 h-0 overflow-hidden">
-              <label htmlFor="sc_company_website">Company Website</label>
-              <input type="text" id="sc_company_website" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} tabIndex={-1} autoComplete="off" />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button type="button" variant="outline" className="flex-1 py-6" onClick={() => setStep(2)}>
-                Back
+              <Button type="submit" className="w-full" disabled={submitting}>
+                {submitting ? 'Booking…' : 'Confirm Call'}
               </Button>
-              <Button type="submit" disabled={isSubmitting} className="flex-1 py-6 text-base font-semibold">
-                {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Submitting...</> : 'Confirm Call'}
-              </Button>
-            </div>
-          </form>
-        </FormCard>
+            </form>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

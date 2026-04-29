@@ -21,7 +21,7 @@ export function buildScheduleCallQuotePayload(
   return {
     supplementType: 'Schedule a Call',
     quantity: values.quantityRange,
-    formulationStatus: 'need_help',
+    formulationStatus: 'general_idea',
     deliveryFormat: 'unspecified',
     ingredients: [
       { id: crypto.randomUUID(), name: 'Call scheduling request', amount: '', unit: 'mg' },

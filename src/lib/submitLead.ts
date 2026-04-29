@@ -90,17 +90,12 @@ function buildPayload(
  * Throws a descriptive error if validation fails.
  */
 function validatePreSubmit(formData: QuoteFormData): void {
-  if (!formData.fullName || formData.fullName.trim() === '') {
-    throw new Error('Full name is required.');
-  }
   if (!formData.email || formData.email.trim() === '') {
     throw new Error('Email is required.');
   }
-  if (!formData.supplementType || formData.supplementType.trim() === '') {
-    throw new Error('Supplement type is required.');
-  }
-  if (!formData.quantity || formData.quantity.trim() === '') {
-    throw new Error('Quantity is required.');
+  // fullName is soft-required: general_idea quick-submit may not have it set yet
+  if (!formData.fullName || formData.fullName.trim() === '') {
+    console.warn(`${LOG_PREFIX} fullName is empty — will proceed with email-derived name`);
   }
 }
 

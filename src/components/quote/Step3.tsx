@@ -1,5 +1,5 @@
 import { UseFormReturn } from 'react-hook-form';
-import { Package, Mail, Phone, Building2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Package, Mail, Building2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
 import FormCard from './FormCard';
 import { QuoteFormData, materialTypes, unitsPerBoxOptions, labelProviderOptions, designProviderOptions } from '@/types/quoteForm';
@@ -218,55 +218,14 @@ const Step3 = ({ form }: Step3Props) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-foreground">
-                  Full Name <span className="text-destructive">*</span>
+                  Full Name
                 </Label>
                 <Input
-                  placeholder=""
+                  placeholder="Jane Doe"
                   value={watch('fullName') || ''}
                   onChange={(e) => setValue('fullName', e.target.value, { shouldValidate: true })}
-                  className={cn(
-                    'bg-white border-border',
-                    errors.fullName && 'border-destructive'
-                  )}
-                />
-                {errors.fullName && (
-                  <p className="text-sm text-destructive">{errors.fullName.message}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-foreground">
-                  Email Address <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  type="email"
-                  placeholder=""
-                  value={watch('email') || ''}
-                  onChange={(e) => setValue('email', e.target.value, { shouldValidate: true })}
-                  className={cn(
-                    'bg-white border-border',
-                    errors.email && 'border-destructive'
-                  )}
-                />
-                {errors.email && (
-                  <p className="text-sm text-destructive">{errors.email.message}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-foreground flex items-center gap-2">
-                  <Phone className="w-4 h-4" />
-                  Phone <span className="text-muted-foreground font-normal">(optional)</span>
-                </Label>
-                <Input
-                  type="tel"
-                  placeholder=""
-                  value={watch('phone') || ''}
-                  onChange={(e) => setValue('phone', e.target.value)}
                   className="bg-white border-border"
                 />
-                <p className="text-xs text-muted-foreground">For faster quote delivery</p>
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-foreground flex items-center gap-2">

@@ -2,11 +2,11 @@ import { z } from 'zod';
 
 // Step 1: Initial Information
 export const step1Schema = z.object({
-  supplementType: z.string().min(1, 'Please select a product type'),
-  quantity: z.string().min(1, 'Please select a quantity range'),
-  formulationStatus: z.enum(['complete', 'general_idea', 'need_help'], {
+  formulationStatus: z.enum(['complete', 'general_idea'], {
     required_error: 'Please select your formulation status',
   }),
+  email: z.string().email('Please enter a valid email address'),
+  phone: z.string().min(7, 'Please enter a valid phone number'),
 });
 
 // Ingredient schema
@@ -19,6 +19,8 @@ export const ingredientSchema = z.object({
 
 // Step 2: Formulation Details
 export const step2Schema = z.object({
+  supplementType: z.string().optional(),
+  quantity: z.string().optional(),
   deliveryFormat: z.string().min(1, 'Please select a delivery format'),
   ingredients: z.array(ingredientSchema).min(1, 'Add at least one ingredient'),
   servingSize: z.string().optional(),
@@ -42,9 +44,7 @@ export const step3Schema = z.object({
   additionalComments: z.string().optional(),
   
   // Contact info
-  fullName: z.string().min(1, 'Full name is required'),
-  email: z.string().email('Please enter a valid email address'),
-  phone: z.string().optional(),
+  fullName: z.string().optional(),
   company: z.string().optional(),
   
   // Consent
