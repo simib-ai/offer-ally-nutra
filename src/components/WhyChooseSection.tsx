@@ -42,25 +42,25 @@ const productCards = [
     title: "Capsules", 
     color: "bg-red-50",
     image: productCapsules,
-    link: "https://id-preview--e9edc903-0ae4-4a0e-8513-7d9d0b009a59.lovable.app/services?format=capsules",
+    link: "https://allynutra.com/services?format=capsules",
   },
   { 
     title: "Sachets", 
     color: "bg-gray-100",
     image: productSachets,
-    link: "https://id-preview--e9edc903-0ae4-4a0e-8513-7d9d0b009a59.lovable.app/services?format=sachets",
+    link: "https://allynutra.com/services?format=sachets",
   },
   { 
     title: "Stick Packs", 
     color: "bg-gray-50",
     image: productStickPacks,
-    link: "https://id-preview--e9edc903-0ae4-4a0e-8513-7d9d0b009a59.lovable.app/services?format=stick-packs",
+    link: "https://allynutra.com/services?format=stick-packs",
   },
   { 
     title: "Resealable Pouches", 
     color: "bg-cyan-50",
     image: productPouches,
-    link: "https://id-preview--e9edc903-0ae4-4a0e-8513-7d9d0b009a59.lovable.app/services?format=pouches",
+    link: "https://allynutra.com/services?format=pouches",
   },
 ];
 
@@ -98,6 +98,8 @@ const WhyChooseSection = () => {
                 <a
                   key={product.title}
                   href={product.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="group bg-white rounded-lg border border-border card-shadow overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-accent hover:-translate-y-1 cursor-pointer block"
                 >
                   {/* Product Image */}
