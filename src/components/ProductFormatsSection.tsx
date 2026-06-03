@@ -36,6 +36,8 @@ const ProductFormatsSection = () => {
           {products.map((product) => (
             <a
               href={product.link}
+              target="_blank"
+              rel="noopener noreferrer"
               key={product.title}
               className="bg-white rounded-xl border border-border card-shadow card-hover overflow-hidden block"
             >
