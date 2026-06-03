@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
+import { useAttribution, forceRefreshAttribution } from '@/hooks/useAttribution';
 import allyNutraLogo from '@/assets/ally-nutra-logo.png';
 
 interface AvailableSlot {
@@ -72,6 +73,9 @@ const ScheduleCallForm = () => {
   const [phone, setPhone] = useState('');
   const [company, setCompany] = useState('');
   const [message, setMessage] = useState('');
+
+  // Initialize attribution tracking
+  useAttribution();
 
   // Fetch all available (unbooked) slots
   useEffect(() => {
@@ -220,6 +224,8 @@ const ScheduleCallForm = () => {
 
     setSubmitting(true);
     try {
+      const attribution = forceRefreshAttribution();
+      
       const { data, error } = await supabase.functions.invoke('book-appointment', {
         body: {
           slot_id: selectedSlot.id,
@@ -231,6 +237,21 @@ const ScheduleCallForm = () => {
           client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           is_individual_link: false,
           lead_source: 'Campaign',
+          gclid: attribution.gclid,
+          wbraid: attribution.wbraid,
+          gbraid: attribution.gbraid,
+          fbclid: attribution.fbclid,
+          utm_source: attribution.utm_source,
+          utm_medium: attribution.utm_medium,
+          utm_campaign: attribution.utm_campaign,
+          utm_content: attribution.utm_content,
+          utm_term: attribution.utm_term,
+          campaign_id: attribution.campaign_id,
+          ad_group_id: attribution.ad_group_id,
+          ad_id: attribution.ad_id,
+          utm_keyword: attribution.utm_keyword,
+          utm_matchtype: attribution.utm_matchtype,
+          page_url: attribution.page_url,
         },
       });
 
